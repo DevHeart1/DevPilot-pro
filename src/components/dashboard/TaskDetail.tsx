@@ -472,6 +472,18 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
     const viewportLabel = task.viewportPreset === "mobile" ? "375x812" : task.viewportPreset === "tablet" ? "768x1024" : "1280x800";
     const liveSessionUrl = task.sandboxUrl || config.sandboxUrl || "http://localhost:8080";
     const inspectionTargetUrl = task.inspectionTargetUrl || task.targetUrl || "http://127.0.0.1:3000";
+    const isHackathonShowcase = task.componentHints?.includes("hackathon_demo_showcase") || false;
+    const showLiveBrowserSession = task.status === "running" && !isHackathonShowcase;
+    const primaryActionLabel = isHackathonShowcase
+        ? (isLaunchingSecureDemo ? "Preparing Secure Demo..." : "Launch Secure Demo")
+        : run?.phase === "verification" || isApproving
+            ? "Verifying..."
+            : latestProposal?.status === "ready_for_review"
+                ? "Approve & Commit"
+                : "Awaiting Proposal";
+    const primaryActionDisabled = isHackathonShowcase
+        ? isLaunchingSecureDemo || latestProposal?.status !== "ready_for_review"
+        : task.status !== "running" || isApproving || run?.phase === "verification" || latestProposal?.status !== "ready_for_review";
     const projectOptions = projects.length > 0 ? projects : [task.repo];
     const branchOptions = Array.from(new Set([task.branch, task.defaultBranch, ...branches].filter(Boolean)));
     const browserSummary = verificationResult?.summary || parsedVerification?.summary || parsedVision?.summary || "Waiting for live inspection evidence.";
@@ -671,12 +683,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
                         <button
                             type="button"
                             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-sm font-bold text-background-dark hover:bg-primary/90 disabled:opacity-50"
-                            onClick={handleApprove}
-                            disabled={task.status !== "running" || isApproving || run?.phase === "verification" || latestProposal?.status !== "ready_for_review"}
+                            onClick={isHackathonShowcase ? handleLaunchSecureDemo : handleApprove}
+                            disabled={primaryActionDisabled}
                         >
-                            <span>
-                                {run?.phase === "verification" || isApproving ? "Verifying..." : latestProposal?.status === "ready_for_review" ? "Approve & Commit" : "Awaiting Proposal"}
-                            </span>
+                            <span>{primaryActionLabel}</span>
                         </button>
                     </div>
                 </header>
@@ -865,7 +875,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
                     <div className="flex flex-1 flex-col overflow-hidden md:flex-row min-h-0">
                         <section className={`flex flex-col border-r border-border-dark bg-[#0a0a0a] transition-all duration-300 min-h-0 min-w-0 ${isBrowserOpen ? "flex-[2]" : "w-12 flex-none"}`}>
                             <div className="flex-1 relative overflow-hidden bg-background-dark group min-h-0">
-                                {task.status === "running" ? (
+                                {showLiveBrowserSession ? (
                                     <div className="absolute inset-0 flex flex-col">
                                         {/* Runtime Context Metadata Strip */}
                                         <div className="bg-[#111111] border-b border-border-dark px-4 py-2 flex items-center justify-between shadow-sm z-10">
@@ -875,7 +885,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
                                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                                                         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500"></span>
                                                     </span>
-                                                    LIVE SESSION
+                                                    LIVE SANDBOX
                                                 </div>
                                                 <span className="text-slate-500 text">|</span>
                                                 <div className="text-[11px] text-slate-300 font-mono tracking-tight font-medium flex items-center gap-1.5">
@@ -908,7 +918,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
                                             <div className="flex items-center gap-3">
                                                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-slate-600/30 bg-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                                     <span className="material-symbols-outlined text-[12px]">photo_camera</span>
-                                                    CAPTURED FRAME
+                                                    {isHackathonShowcase ? "SHOWCASE FRAME" : "CAPTURED FRAME"}
                                                 </div>
                                                 <span className="text-slate-500 text">|</span>
                                                 <div className="text-[11px] text-slate-300 font-mono tracking-tight font-medium flex items-center gap-1.5">

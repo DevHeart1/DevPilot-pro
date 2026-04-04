@@ -108,8 +108,9 @@ export const SecureActionTaskCard: React.FC<SecureActionTaskCardProps> = ({
             Secure Handoff
           </div>
           <p className="mt-2 text-[13px] leading-relaxed text-slate-400">
-            Repo writes pause for approval and step-up, then execute through the
-            protected backend boundary instead of browser-held provider tokens.
+            High-risk repo writes pause for approval and step-up, then execute
+            through the protected backend boundary instead of browser-held
+            provider tokens.
           </p>
         </div>
         <button
@@ -118,7 +119,7 @@ export const SecureActionTaskCard: React.FC<SecureActionTaskCardProps> = ({
           disabled={!canLaunchDemo || isLaunchingDemo}
           className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isLaunchingDemo ? "Preparing..." : "Start Demo"}
+          {isLaunchingDemo ? "Preparing..." : "Launch Demo"}
         </button>
       </div>
 
@@ -143,7 +144,7 @@ export const SecureActionTaskCard: React.FC<SecureActionTaskCardProps> = ({
         <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-4 text-[12px] leading-relaxed text-slate-500">
           Launch the secure demo after a patch proposal is ready to show the
           approval checkpoint, supervised repo action, team notification, and
-          verification follow-up in one flow.
+          verification follow-up in one clean flow.
         </div>
       ) : (
         <div className="mt-4 space-y-3">

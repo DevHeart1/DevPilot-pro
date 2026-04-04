@@ -98,6 +98,8 @@ export * from './stepUpRequirement.service';
 export * from './authorizationAudit.service';
 export * from './authorizationInsight.service';
 export * from './delegatedActionPolicy.service';
+export * from './demoScenario.service';
+export * from './demoReadiness.service';
 export * from './secureAction.service';
 
 export * from './gitlabDuo.service';

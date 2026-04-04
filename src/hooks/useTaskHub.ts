@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { sandboxAdapter } from "../lib/adapters/sandbox.adapter";
 import { gitlabRepositoryAdapter } from "../lib/adapters/gitlabRepository.adapter";
 import { gitlabDuoAdapter } from "../lib/adapters/gitlabDuo.adapter";
@@ -8,6 +8,7 @@ import { initializeDb } from "../lib/seeds";
 import {
     authorizationInsightService,
     codeReviewIssueService,
+    demoReadinessService,
     secureActionService,
     taskService,
     runService,
@@ -15,6 +16,7 @@ import {
 import { devpilotFlow } from "../lib/gitlab-duo/flows/devpilot.flow";
 import { runBackgroundCodeReviewDiscoveryWorkflow } from "../lib/workflows/backgroundCodeReviewDiscovery.workflow";
 import { continueSecureActionDemoWorkflow } from "../lib/workflows/secureActionDemo.workflow";
+import { launchHackathonDemoWorkflow } from "../lib/workflows/hackathonDemo.workflow";
 import {
     ApprovalRequest,
     ApprovalRequestTransitionResult,
@@ -35,6 +37,7 @@ import {
     StepUpRequirementTransitionResult,
     Task,
 } from "../types";
+import { DemoReadinessReport } from "../lib/services/demoReadiness.service";
 
 export interface UserConfig {
     targetAppBaseUrl: string;
@@ -118,7 +121,6 @@ export const useTaskHub = () => {
         runtimeMode: "mock",
         warnings: [],
     });
-
     const [userConfig, setUserConfig] = useState<UserConfig>(() => {
         const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
         if (stored) {
@@ -133,6 +135,26 @@ export const useTaskHub = () => {
             gitlabDefaultBranch: config.gitlabDefaultBranch || "main",
         };
     });
+
+    const demoReadiness = useMemo<DemoReadinessReport>(() =>
+        demoReadinessService.evaluate({
+            project: integrationState.project,
+            targetAppBaseUrl: userConfig.targetAppBaseUrl || config.targetAppBaseUrl,
+            authSession: secureRuntimeState.session,
+            integrations: secureRuntimeState.integrations,
+            policies: secureRuntimeState.policies,
+            warnings: secureRuntimeState.warnings,
+            gitlabRepositoryModeReady: config.isGitLabConfigured && Boolean(integrationState.project),
+            sandboxConfigured: config.isSandboxConfigured,
+        }),
+    [
+        integrationState.project,
+        userConfig.targetAppBaseUrl,
+        secureRuntimeState.session,
+        secureRuntimeState.integrations,
+        secureRuntimeState.policies,
+        secureRuntimeState.warnings,
+    ]);
 
     useEffect(() => {
         localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(userConfig));
@@ -558,6 +580,46 @@ export const useTaskHub = () => {
         return pendingAction;
     }, [executePendingAction, previewDelegatedAction]);
 
+    const launchHackathonDemo = useCallback(async (): Promise<string | null> => {
+        try {
+            setDashboardError(null);
+            await initializeDb();
+
+            const targetAppBaseUrl =
+                userConfig.targetAppBaseUrl || config.targetAppBaseUrl;
+            if (!targetAppBaseUrl) {
+                setDashboardError("Set a target application URL before launching the showcase demo.");
+                return null;
+            }
+
+            const branch =
+                selectedBranch ||
+                integrationState.project?.defaultBranch ||
+                userConfig.gitlabDefaultBranch ||
+                "main";
+
+            const taskId = await launchHackathonDemoWorkflow({
+                scenario: demoReadiness.recommendedScenario,
+                project: integrationState.project,
+                branch,
+                targetAppBaseUrl,
+            });
+
+            await loadSecureRuntimeState();
+            return taskId;
+        } catch (error) {
+            setDashboardError(error instanceof Error ? error.message : String(error));
+            return null;
+        }
+    }, [
+        demoReadiness.recommendedScenario,
+        integrationState.project,
+        loadSecureRuntimeState,
+        selectedBranch,
+        userConfig.gitlabDefaultBranch,
+        userConfig.targetAppBaseUrl,
+    ]);
+
     const beginLogin = useCallback((returnTo: string = "/settings") => {
         secureActionAdapter.beginLogin(returnTo);
     }, []);
@@ -596,6 +658,8 @@ export const useTaskHub = () => {
         handleProjectChange,
         refreshIntegration: loadIntegrationState,
         refreshSecureRuntime: loadSecureRuntimeState,
+        demoReadiness,
+        launchHackathonDemo,
         previewDelegatedAction,
         triggerDelegatedAction,
         approveApprovalRequest,

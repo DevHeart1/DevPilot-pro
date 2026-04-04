@@ -92,7 +92,7 @@ export const DashboardHeroComposer: React.FC<DashboardHeroComposerProps> = ({
   isSubmitting = false,
   isReady = false,
   placeholder = "Describe the UI defect, repository task, or verification goal",
-  helperText = "Routes through vision inspection, patch proposal, and verification before GitLab handoff.",
+  helperText = "Inspects the issue, prepares a patch, requests approval for risky writes, and executes provider actions through secure delegated access.",
   projectLabel = "Select Project",
   branchLabel = "main",
   availableProjects = [],
@@ -131,7 +131,7 @@ export const DashboardHeroComposer: React.FC<DashboardHeroComposerProps> = ({
       <div className="relative flex flex-col items-center text-center">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/[0.15] bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
           <Sparkles className="h-3.5 w-3.5" />
-          GitLab Duo Flow
+          Secure AI Teammate
         </div>
 
         <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
@@ -139,9 +139,9 @@ export const DashboardHeroComposer: React.FC<DashboardHeroComposerProps> = ({
         </h1>
 
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-base">
-          Describe a UI defect, repository task, or verification goal. DevPilot
-          will route the work through inspection, patch preparation, and GitLab
-          handoff.
+          Describe a UI defect, repo task, or verification goal. DevPilot will
+          inspect the issue, prepare a review-ready change, and keep high-risk
+          external actions behind explicit approval and secure delegated access.
         </p>
 
         <div
@@ -289,7 +289,7 @@ export const DashboardHeroComposer: React.FC<DashboardHeroComposerProps> = ({
 
               <div className="flex items-center gap-2 font-medium text-slate-400">
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span>ui_inspector -&gt; code_fixer -&gt; verifier</span>
+                <span>ui_inspector -&gt; code_fixer -&gt; secure_handoff -&gt; verifier</span>
               </div>
             </div>
           </div>

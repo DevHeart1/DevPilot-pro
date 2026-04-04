@@ -46,7 +46,7 @@ export async function startSecureActionDemoWorkflow(
     taskId,
     sender: "devpilot",
     content:
-      "Preparing the secure handoff demo: DevPilot will stage the patch, request approval for the repo write, and keep the provider action behind the protected backend boundary.",
+      "Preparing the secure handoff: DevPilot will stage the review package, pause for approval before the repo write, and keep provider execution behind the secure backend boundary.",
     kind: "info",
     timestamp: Date.now(),
   });
@@ -68,11 +68,36 @@ export async function startSecureActionDemoWorkflow(
     .toString()
     .slice(-5)}`;
   const patchFiles = await patchProposalService.getPatchFilesForProposal(proposalId);
-  const gitlabFiles = patchFiles.map((file) => ({
-    filePath: file.filePath,
-    content: file.nextContent || "",
-    action: file.changeType,
-  }));
+  const gitlabFiles = patchFiles
+    .filter((file) => file.changeType === "create" || file.changeType === "update")
+    .map((file) => ({
+      filePath: file.filePath,
+      content: file.nextContent || "",
+      action: file.changeType,
+    }))
+    .filter((file) => file.content.length > 0);
+
+  if (gitlabFiles.length === 0) {
+    gitlabFiles.push({
+      filePath: "docs/devpilot/secure-demo-handoff.md",
+      content: buildSecureDemoFallbackContent({
+        repo: task.repo,
+        title: proposal.title,
+        summary: proposal.summary,
+        explanation: proposal.explanation,
+      }),
+      action: "create",
+    });
+
+    await taskService.appendAgentMessage({
+      taskId,
+      sender: "system",
+      content:
+        "No repo-ready file payload was attached to the proposal, so DevPilot added a deterministic secure handoff note to keep the demo branch reliable.",
+      kind: "info",
+      timestamp: Date.now(),
+    });
+  }
 
   const branchResult = await gitlabRepositoryAdapter.createBranch(
     branchName,
@@ -159,7 +184,7 @@ export async function startSecureActionDemoWorkflow(
     taskId,
     sender: "system",
     content:
-      "The patch is staged on a secure demo branch. DevPilot is now waiting for approval and step-up before creating the draft merge request.",
+      "The review package is staged on a secure demo branch. Approval is now required before the repo write, and step-up will be enforced before DevPilot opens the draft merge request.",
     kind: "warning",
     timestamp: Date.now(),
   });
@@ -170,6 +195,16 @@ export async function startSecureActionDemoWorkflow(
 export async function continueSecureActionDemoWorkflow(
   result: SecureActionExecutionResult,
 ): Promise<void> {
+  if (
+    result.ok &&
+    result.execution.actionKey === "gitlab.create_draft_issue" &&
+    result.execution.status === "completed" &&
+    result.execution.taskId
+  ) {
+    await handleFallbackIssueCompletion(result);
+    return;
+  }
+
   if (
     !result.ok ||
     result.execution.actionKey !== "gitlab.open_draft_pr" ||
@@ -239,8 +274,8 @@ export async function continueSecureActionDemoWorkflow(
     taskId,
     sender: "devpilot",
     content: webUrl
-      ? `Secure repo action complete. DevPilot opened draft MR !${mergeRequestIid} and linked it back into the task workspace: ${webUrl}`
-      : "Secure repo action complete. DevPilot opened the draft merge request through the protected backend boundary.",
+      ? `Approval completed. DevPilot opened draft MR !${mergeRequestIid} through secure delegated access and linked it back into the workspace: ${webUrl}`
+      : "Approval completed. DevPilot opened the draft merge request through the protected backend boundary.",
     kind: "success",
     timestamp: Date.now(),
   });
@@ -289,7 +324,7 @@ export async function continueSecureActionDemoWorkflow(
       taskId,
       sender: "system",
       content:
-        "The secure demo flow could not send the team Slack update because no default Slack channel is configured.",
+        "Slack delivery is available, but no default review channel is configured, so the team update was skipped safely.",
       kind: "warning",
       timestamp: Date.now(),
     });
@@ -297,6 +332,55 @@ export async function continueSecureActionDemoWorkflow(
 
   await gitlabDuoAdapter.invokeAgent(taskId, "verify_fix", "verifier");
   await runPostFixVerificationWorkflow(taskId);
+}
+
+async function handleFallbackIssueCompletion(
+  result: SecureActionExecutionResult,
+): Promise<void> {
+  const taskId = result.execution.taskId;
+  if (!taskId) {
+    return;
+  }
+
+  const metadata = parseExecutionMetadata(result.execution.metadata);
+  const response = metadata.response;
+  const issueRef = asNumber(response.iid ?? result.execution.externalRef);
+  const issueUrl = asOptionalString(response.web_url) ?? result.execution.externalUrl;
+
+  await taskService.appendAgentMessage({
+    taskId,
+    sender: "devpilot",
+    content: issueUrl
+      ? `Fallback-secure repo action complete. DevPilot created review-ready issue #${issueRef} through the secure backend path: ${issueUrl}`
+      : "Fallback-secure repo action complete. DevPilot created the review-ready issue through the protected backend path.",
+    kind: "success",
+    timestamp: Date.now(),
+  });
+
+  if (config.defaultSlackChannelId) {
+    await queueWorkflowDelegatedAction(
+      taskId,
+      {
+        provider: "slack",
+        actionKey: "slack.post_status_message",
+        title: "Send fallback-secure Slack update",
+        summary:
+          "Narrow team update after the fallback-secure repo action completes.",
+        metadata: {
+          channelId: config.defaultSlackChannelId,
+          channelName: config.defaultSlackChannelName,
+          notificationClass: "narrow_status",
+          notificationCategory: "fallback_repo_action",
+          text: [
+            `DevPilot completed a supervised fallback repo action for "${result.execution.summary}".`,
+            issueUrl ? `Review-ready issue: ${issueUrl}` : "Provider record linked in DevPilot.",
+            "The action stayed behind the secure backend boundary and did not expose provider tokens in the browser.",
+          ].join("\n"),
+        },
+      },
+      { executeImmediatelyWhenSafe: true },
+    );
+  }
 }
 
 async function ensureVerificationPlan(
@@ -360,4 +444,27 @@ function asOptionalString(value: unknown): string | undefined {
 function asNumber(value: unknown): number | undefined {
   const numberValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+function buildSecureDemoFallbackContent(args: {
+  repo: string;
+  title: string;
+  summary: string;
+  explanation: string;
+}): string {
+  return [
+    "# DevPilot Secure Demo Handoff",
+    "",
+    `Repository: ${args.repo}`,
+    `Proposal: ${args.title}`,
+    "",
+    "## Summary",
+    args.summary,
+    "",
+    "## Why Approval Matters",
+    "This repo write is supervised because it changes shared project state and can influence reviewer workflow.",
+    "",
+    "## Notes",
+    args.explanation,
+  ].join("\n");
 }

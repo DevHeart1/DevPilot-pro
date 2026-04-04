@@ -461,7 +461,7 @@ export async function runPostFixVerificationWorkflow(
     await taskService.appendAgentMessage({
       taskId,
       sender: "system",
-      content: `Verification ${finalStatus.toUpperCase()}: ${comparisonResult.summary}`,
+      content: formatVerificationOutcomeMessage(finalStatus, comparisonResult.summary),
       kind: finalStatus === "passed" ? "success" : "warning",
       timestamp: Date.now(),
     });
@@ -541,4 +541,23 @@ export async function runPostFixVerificationWorkflow(
     await sandboxAdapter.stopBackgroundCommand(serverId).catch(() => { });
     await sandboxAdapter.closeSession(taskId);
   }
+}
+
+function formatVerificationOutcomeMessage(
+  status: "passed" | "failed" | "regression_detected" | "inconclusive",
+  summary: string,
+): string {
+  if (status === "passed") {
+    return `Verification completed; no regression detected. ${summary}`;
+  }
+
+  if (status === "regression_detected") {
+    return `Verification detected a regression. ${summary}`;
+  }
+
+  if (status === "inconclusive") {
+    return `Verification was inconclusive. ${summary}`;
+  }
+
+  return `Verification needs attention. ${summary}`;
 }

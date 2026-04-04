@@ -48,10 +48,12 @@ const TaskDetailRoute = ({ projects, branches }: { projects: string[]; branches:
 export default function App() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Task["category"]>("tasks");
+  const [isLaunchingDemo, setIsLaunchingDemo] = useState(false);
 
   const {
     integrationState,
     secureRuntimeState,
+    demoReadiness,
     selectedBranch,
     setSelectedBranch,
     isCreatingTask,
@@ -62,6 +64,7 @@ export default function App() {
     startCodeReviewIssue,
     handleProjectChange,
     refreshSecureRuntime,
+    launchHackathonDemo,
     previewDelegatedAction,
     triggerDelegatedAction,
     approveApprovalRequest,
@@ -76,6 +79,18 @@ export default function App() {
   const handleCreateTask = async (prompt: string) => {
     const taskId = await createTask(prompt);
     if (taskId) navigate(`/task/${taskId}`);
+  };
+
+  const handleLaunchHackathonDemo = async () => {
+    setIsLaunchingDemo(true);
+    try {
+      const taskId = await launchHackathonDemo();
+      if (taskId) {
+        navigate(`/task/${taskId}`);
+      }
+    } finally {
+      setIsLaunchingDemo(false);
+    }
   };
 
   const projectPath = integrationState.project?.pathWithNamespace || "";
@@ -116,6 +131,9 @@ export default function App() {
                 authorizationPatternSummary={secureRuntimeState.authorizationPatternSummary}
                 warnings={secureRuntimeState.warnings}
                 loading={secureRuntimeState.loading}
+                demoReadiness={demoReadiness}
+                onLaunchDemo={handleLaunchHackathonDemo}
+                isLaunchingDemo={isLaunchingDemo}
               />
 
               <section className="mt-16">

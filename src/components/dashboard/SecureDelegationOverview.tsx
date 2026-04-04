@@ -7,6 +7,7 @@ import {
   PlugZap,
   ShieldCheck,
 } from "lucide-react";
+import { DemoReadinessReport } from "../../lib/services/demoReadiness.service";
 import {
   ApprovalRequest,
   AuthSessionSnapshot,
@@ -29,6 +30,9 @@ interface SecureDelegationOverviewProps {
   authorizationPatternSummary: AuthorizationPatternSummary;
   warnings: string[];
   loading?: boolean;
+  demoReadiness?: DemoReadinessReport;
+  onLaunchDemo?: () => Promise<void>;
+  isLaunchingDemo?: boolean;
 }
 
 export const SecureDelegationOverview: React.FC<SecureDelegationOverviewProps> = ({
@@ -42,6 +46,9 @@ export const SecureDelegationOverview: React.FC<SecureDelegationOverviewProps> =
   authorizationPatternSummary,
   warnings,
   loading = false,
+  demoReadiness,
+  onLaunchDemo,
+  isLaunchingDemo = false,
 }) => {
   const connectedCount = integrations.filter(
     (integration) => integration.status === "connected",
@@ -69,15 +76,33 @@ export const SecureDelegationOverview: React.FC<SecureDelegationOverviewProps> =
               Secure Delegation
             </div>
             <p className="mt-2 text-sm text-slate-300">
-              DevPilot now routes delegated actions through an explicit secure runtime boundary instead of browser-held provider credentials.
+              DevPilot acts like a supervised AI developer teammate: scoped access, explicit approval for risky writes, and provider execution behind the secure backend boundary.
             </p>
           </div>
-          <Link
-            to="/settings"
-            className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary transition-colors hover:border-primary/35 hover:bg-primary/15"
-          >
-            Open Permissions
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {demoReadiness && onLaunchDemo && (
+              <button
+                type="button"
+                onClick={() => void onLaunchDemo()}
+                disabled={!demoReadiness.canLaunchDemo || isLaunchingDemo}
+                className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary transition-colors hover:border-primary/35 hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLaunchingDemo
+                  ? "Preparing Demo"
+                  : demoReadiness.status === "ready"
+                    ? "Load Golden Demo"
+                    : demoReadiness.status === "fallback"
+                      ? "Load Fallback Demo"
+                      : "Load Blocked Demo"}
+              </button>
+            )}
+            <Link
+              to="/settings"
+              className="inline-flex items-center justify-center rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary transition-colors hover:border-primary/35 hover:bg-primary/15"
+            >
+              Open Permissions
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -172,25 +197,71 @@ export const SecureDelegationOverview: React.FC<SecureDelegationOverviewProps> =
           </div>
         )}
 
-        {(primaryInsight || authorizationPatternSummary.generatedAt > 0) && (
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+        {(demoReadiness || primaryInsight || authorizationPatternSummary.generatedAt > 0) && (
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="rounded-2xl border border-white/[0.06] bg-black/[0.18] px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Why Actions Pause
-              </div>
-              <div className="mt-2 text-sm font-semibold text-white">
-                {primaryInsight?.title ?? "Secure runtime summary"}
-              </div>
-              <p className="mt-1 text-sm leading-relaxed text-slate-400">
-                {primaryInsight?.summary
-                  ?? "Delegated actions stay inside explicit policy, approval, and step-up boundaries."}
-              </p>
+              {demoReadiness ? (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                      Judge Demo
+                    </div>
+                    <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${demoStatusClass(demoReadiness.status)}`}>
+                      {demoReadiness.status}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-sm font-semibold text-white">
+                    {demoReadiness.headline}
+                  </div>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                    {demoReadiness.summary}
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {demoReadiness.checks.slice(0, 4).map((check) => (
+                      <div
+                        key={check.id}
+                        className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            {check.label}
+                          </span>
+                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] ${demoStatusClass(check.status)}`}>
+                            {check.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
+                          {check.summary}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    Why Actions Pause
+                  </div>
+                  <div className="mt-2 text-sm font-semibold text-white">
+                    {primaryInsight?.title ?? "Secure runtime summary"}
+                  </div>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                    {primaryInsight?.summary
+                      ?? "Delegated actions stay inside explicit policy, approval, and step-up boundaries."}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="rounded-2xl border border-white/[0.06] bg-black/[0.18] px-4 py-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Authorization Pattern
+                Authorization Snapshot
               </div>
+              {primaryInsight && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                  {primaryInsight.summary}
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <PatternPill
                   label="Auto-allowed"
@@ -230,3 +301,15 @@ const PatternPill = ({ label, value }: { label: string; value: string }) => (
     <span className="ml-2 font-semibold text-white">{value}</span>
   </span>
 );
+
+function demoStatusClass(status: "ready" | "fallback" | "blocked"): string {
+  if (status === "ready") {
+    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-300";
+  }
+
+  if (status === "fallback") {
+    return "border-amber-500/20 bg-amber-500/10 text-amber-300";
+  }
+
+  return "border-rose-500/20 bg-rose-500/10 text-rose-300";
+}
