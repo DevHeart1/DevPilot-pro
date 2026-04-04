@@ -24,6 +24,12 @@ export function createRuntimeEnv(): RuntimeEnv {
     liveDelegatedActionMode: parseBooleanEnv(
       process.env.VITE_LIVE_DELEGATED_ACTION_MODE,
     ),
+    liveAsyncAuthorizationMode: parseBooleanEnv(
+      process.env.VITE_LIVE_ASYNC_AUTH_MODE ?? process.env.LIVE_ASYNC_AUTH_MODE,
+    ),
+    liveStepUpMode: parseBooleanEnv(
+      process.env.VITE_LIVE_STEP_UP_MODE ?? process.env.LIVE_STEP_UP_MODE,
+    ),
     liveGitHubActionMode: parseBooleanEnv(
       process.env.VITE_LIVE_GITHUB_ACTION_MODE,
     ),
@@ -33,6 +39,19 @@ export function createRuntimeEnv(): RuntimeEnv {
     liveSlackActionMode: parseBooleanEnv(
       process.env.VITE_LIVE_SLACK_ACTION_MODE,
     ),
+    approvalTimeoutSeconds: Number(
+      process.env.APPROVAL_TIMEOUT_SECONDS
+      ?? process.env.VITE_APPROVAL_TIMEOUT_SECONDS
+      ?? "900",
+    ),
+    asyncAuthorizationCallbackUrl:
+      process.env.ASYNC_AUTH_CALLBACK_URL
+      ?? process.env.VITE_ASYNC_AUTH_CALLBACK_URL
+      ?? undefined,
+    stepUpCallbackUrl:
+      process.env.STEP_UP_CALLBACK_URL
+      ?? process.env.VITE_STEP_UP_CALLBACK_URL
+      ?? undefined,
     providerConnections: {
       github:
         process.env.AUTH0_TOKEN_VAULT_GITHUB_CONNECTION

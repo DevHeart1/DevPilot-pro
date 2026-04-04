@@ -4,9 +4,11 @@ import {
   delegatedActionPolicies,
 } from "../../src/lib/secure-actions/catalog";
 import {
+  ApprovalRequest,
   DelegatedActionExecution,
   PendingDelegatedAction,
   SecureRuntimeSnapshot,
+  StepUpRequirement,
 } from "../../src/types";
 import { githubActionService } from "./githubAction.service";
 import { gitlabActionService } from "./gitlabAction.service";
@@ -18,8 +20,17 @@ export async function buildRuntimeSnapshot(options: {
   session: RuntimeSessionRecord;
   pendingActions: PendingDelegatedAction[];
   executions: DelegatedActionExecution[];
+  approvalRequests: ApprovalRequest[];
+  stepUpRequirements: StepUpRequirement[];
 }): Promise<SecureRuntimeSnapshot> {
-  const { env, session, pendingActions, executions } = options;
+  const {
+    env,
+    session,
+    pendingActions,
+    executions,
+    approvalRequests,
+    stepUpRequirements,
+  } = options;
   const updatedAt = Date.now();
   const auth0Configured = Boolean(
     env.auth0Domain && env.auth0ClientId && env.auth0ClientSecret,
@@ -39,6 +50,8 @@ export async function buildRuntimeSnapshot(options: {
       auth0Configured,
       liveAuthEnabled: env.liveAuthMode,
       liveDelegatedActionEnabled: env.liveDelegatedActionMode,
+      liveAsyncAuthorizationEnabled: env.liveAsyncAuthorizationMode,
+      liveStepUpEnabled: env.liveStepUpMode,
       tokenVaultReady: false,
       domain: env.auth0Domain || undefined,
       audience: env.auth0Audience || undefined,
@@ -74,6 +87,8 @@ export async function buildRuntimeSnapshot(options: {
       policies: delegatedActionPolicies,
       pendingActions,
       executions,
+      approvalRequests,
+      stepUpRequirements,
       runtimeMode: "fallback",
       warnings: buildWarnings({
         env,
@@ -111,6 +126,8 @@ export async function buildRuntimeSnapshot(options: {
     auth0Configured,
     liveAuthEnabled: env.liveAuthMode,
     liveDelegatedActionEnabled: env.liveDelegatedActionMode,
+    liveAsyncAuthorizationEnabled: env.liveAsyncAuthorizationMode,
+    liveStepUpEnabled: env.liveStepUpMode,
     tokenVaultReady,
     domain: env.auth0Domain || undefined,
     audience: env.auth0Audience || undefined,
@@ -152,6 +169,8 @@ export async function buildRuntimeSnapshot(options: {
     policies: delegatedActionPolicies,
     pendingActions,
     executions,
+    approvalRequests,
+    stepUpRequirements,
     runtimeMode: "live",
     warnings: buildWarnings({
       env,
@@ -199,6 +218,18 @@ function buildWarnings(args: {
   if (!env.liveDelegatedActionMode) {
     warnings.push(
       "Delegated execution is globally disabled, so provider actions stay in preview or blocked fallback mode.",
+    );
+  }
+
+  if (!env.liveAsyncAuthorizationMode) {
+    warnings.push(
+      "Async authorization is currently using in-app fallback approvals instead of a live Auth0 backchannel flow.",
+    );
+  }
+
+  if (!env.liveStepUpMode) {
+    warnings.push(
+      "Step-up authentication is currently using local fallback checkpoints instead of a live step-up callback flow.",
     );
   }
 

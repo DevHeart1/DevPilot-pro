@@ -1,4 +1,5 @@
 import {
+  ApprovalRequest,
   AuthSessionSnapshot,
   ConnectedIntegration,
   ConnectedIntegrationSource,
@@ -9,6 +10,7 @@ import {
   PendingDelegatedAction,
   SecureRuntimeMode,
   SecureRuntimeSnapshot,
+  StepUpRequirement,
 } from "../../types";
 
 const providerDisplayNames: Record<IntegrationProvider, string> = {
@@ -33,6 +35,11 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "low",
     requiresApproval: false,
     requiresStepUp: false,
+    approvalTrigger: "never",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: true,
+    safeToAutoExecute: true,
     allowedScopes: ["repo:read"],
     summary: "Read open pull requests before DevPilot drafts or reviews work.",
   },
@@ -43,6 +50,11 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "low",
     requiresApproval: false,
     requiresStepUp: false,
+    approvalTrigger: "never",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: true,
+    safeToAutoExecute: true,
     allowedScopes: ["read_api", "read_repository"],
     summary: "Read repository metadata, branches, and merge-request summaries.",
   },
@@ -53,6 +65,11 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "low",
     requiresApproval: false,
     requiresStepUp: false,
+    approvalTrigger: "never",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: true,
+    safeToAutoExecute: true,
     allowedScopes: ["read_api"],
     summary: "Read open merge requests and issue context before planning work.",
   },
@@ -63,6 +80,11 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "low",
     requiresApproval: false,
     requiresStepUp: false,
+    approvalTrigger: "never",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: true,
+    safeToAutoExecute: true,
     allowedScopes: ["repo:read"],
     summary: "Read repository metadata, pull requests, and issue lists.",
   },
@@ -73,6 +95,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 900,
+    approvalReason:
+      "Creating a GitHub issue changes external project state and should stay human-approved.",
     allowedScopes: ["issues:write"],
     summary: "Create a draft issue in GitHub for a proposed DevPilot follow-up.",
   },
@@ -83,6 +113,11 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "low",
     requiresApproval: false,
     requiresStepUp: false,
+    approvalTrigger: "never",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: true,
+    safeToAutoExecute: true,
     allowedScopes: ["channels:read", "groups:read"],
     summary: "Read channel metadata so DevPilot can target the right workspace context.",
   },
@@ -93,6 +128,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 900,
+    approvalReason:
+      "Posting on an MR can influence teammate review flow and should remain supervised.",
     allowedScopes: ["api"],
     summary: "Post a review-ready note on an existing GitLab merge request.",
   },
@@ -103,6 +146,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 900,
+    approvalReason:
+      "Creating a GitLab issue changes project state and should remain human-approved.",
     allowedScopes: ["api"],
     summary: "Create a draft issue for a proposed bug fix or follow-up task.",
   },
@@ -113,6 +164,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 900,
+    approvalReason:
+      "PR comments should remain explicit because they can affect reviewer expectations.",
     allowedScopes: ["pull_requests:write"],
     summary: "Post a review comment or implementation note on a pull request.",
   },
@@ -123,6 +182,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 600,
+    approvalReason:
+      "Slack status posts are visible to teammates and should stay explicitly approved.",
     allowedScopes: ["chat:write"],
     summary: "Post a narrow status update in a targeted engineering channel.",
   },
@@ -133,6 +200,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 600,
+    approvalReason:
+      "Verification summaries can influence release confidence and should stay human-approved.",
     allowedScopes: ["chat:write"],
     summary: "Post a verification result summary back to the engineering team.",
   },
@@ -143,6 +218,14 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "medium",
     requiresApproval: true,
     requiresStepUp: false,
+    approvalTrigger: "write_requires_review",
+    stepUpTrigger: "never",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 600,
+    approvalReason:
+      "Approval requests are team-visible notifications and should stay explicitly approved.",
     allowedScopes: ["chat:write"],
     summary: "Post an approval-request message when DevPilot is waiting on a sensitive action.",
   },
@@ -153,6 +236,16 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "high",
     requiresApproval: true,
     requiresStepUp: true,
+    approvalTrigger: "high_risk_write",
+    stepUpTrigger: "protected_resource",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 300,
+    approvalReason:
+      "Opening a draft merge request is a high-risk repository write and must pause for approval.",
+    stepUpReason:
+      "Opening repository change proposals should require stronger user verification before execution.",
     allowedScopes: ["api", "write_repository"],
     summary: "Open a draft merge request containing DevPilot-authored code changes.",
   },
@@ -163,6 +256,16 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "high",
     requiresApproval: true,
     requiresStepUp: true,
+    approvalTrigger: "high_risk_write",
+    stepUpTrigger: "protected_resource",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 300,
+    approvalReason:
+      "Rerunning pipelines can affect deployment confidence and should require explicit approval.",
+    stepUpReason:
+      "Pipeline reruns affect protected delivery workflows and should require step-up confirmation.",
     allowedScopes: ["api"],
     summary: "Trigger a pipeline rerun that can affect deployment or release confidence.",
   },
@@ -173,6 +276,16 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "high",
     requiresApproval: true,
     requiresStepUp: true,
+    approvalTrigger: "high_risk_write",
+    stepUpTrigger: "privileged_write",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 300,
+    approvalReason:
+      "Merging code is a privileged repository action and must never happen silently.",
+    stepUpReason:
+      "Merging reviewed code into a protected branch should require stronger user verification.",
     allowedScopes: ["api"],
     summary: "Merge a reviewed merge request into the protected target branch.",
   },
@@ -183,6 +296,16 @@ export const delegatedActionPolicies: DelegatedActionPolicy[] = [
     riskLevel: "high",
     requiresApproval: true,
     requiresStepUp: true,
+    approvalTrigger: "channel_broadcast",
+    stepUpTrigger: "privileged_write",
+    approvalChannel: "in_app",
+    canRunInBackgroundBeforeApproval: false,
+    safeToAutoExecute: false,
+    approvalTimeoutSeconds: 300,
+    approvalReason:
+      "Broad Slack posts can have wide organizational impact and must pause for review.",
+    stepUpReason:
+      "Wide-audience communications should require stronger user confirmation before sending.",
     allowedScopes: ["chat:write", "channels:read"],
     summary: "Post a broad or privileged announcement to a wide Slack audience.",
   },
@@ -250,6 +373,7 @@ export function createPendingDelegatedAction(
   policy: DelegatedActionPolicy,
   now: number = Date.now(),
 ): PendingDelegatedAction {
+  const initialStatus = getInitialPendingActionStatus(policy);
   return {
     id: `pending:${crypto.randomUUID()}`,
     taskId: input.taskId,
@@ -261,6 +385,7 @@ export function createPendingDelegatedAction(
     requiredScopes: policy.allowedScopes,
     approvalStatus: policy.requiresApproval ? "pending" : "not_required",
     stepUpStatus: policy.requiresStepUp ? "required" : "not_required",
+    status: initialStatus,
     metadata: input.metadata ? JSON.stringify(input.metadata) : undefined,
     createdAt: now,
     updatedAt: now,
@@ -275,6 +400,8 @@ export function createSessionSnapshot(options: {
   auth0Configured: boolean;
   liveAuthEnabled: boolean;
   liveDelegatedActionEnabled: boolean;
+  liveAsyncAuthorizationEnabled: boolean;
+  liveStepUpEnabled: boolean;
   tokenVaultReady: boolean;
   domain?: string;
   audience?: string;
@@ -294,6 +421,8 @@ export function createSessionSnapshot(options: {
       configured: options.auth0Configured,
       liveAuthEnabled: options.liveAuthEnabled,
       liveDelegatedActionEnabled: options.liveDelegatedActionEnabled,
+      liveAsyncAuthorizationEnabled: options.liveAsyncAuthorizationEnabled,
+      liveStepUpEnabled: options.liveStepUpEnabled,
       tokenVaultReady: options.tokenVaultReady,
       domain: options.domain,
       audience: options.audience,
@@ -371,6 +500,8 @@ export function createMockSecureRuntimeSnapshot(
     session,
     integrations,
     policies: delegatedActionPolicies,
+    approvalRequests: [] as ApprovalRequest[],
+    stepUpRequirements: [] as StepUpRequirement[],
     executions: [],
     pendingActions: [
       previewTwo,
@@ -385,6 +516,20 @@ export function createMockSecureRuntimeSnapshot(
     ],
     updatedAt: now,
   };
+}
+
+function getInitialPendingActionStatus(
+  policy: DelegatedActionPolicy,
+): PendingDelegatedAction["status"] {
+  if (policy.requiresApproval) {
+    return "awaiting_approval";
+  }
+
+  if (policy.requiresStepUp) {
+    return "awaiting_step_up";
+  }
+
+  return "proposed";
 }
 
 function humanizeActionKey(actionKey: string): string {

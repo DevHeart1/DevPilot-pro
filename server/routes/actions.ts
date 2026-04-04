@@ -21,6 +21,7 @@ export function createActionsRouter(options: {
     const session = options.getSession(request, response);
     const input = validatePreviewInput(request.body);
     const action = createPendingActionForSession({
+      env: options.env,
       sessionId: session.id,
       input,
     });

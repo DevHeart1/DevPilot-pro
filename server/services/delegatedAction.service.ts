@@ -4,6 +4,7 @@ import {
   getDelegatedActionPolicy,
 } from "../../src/lib/secure-actions/catalog";
 import {
+  ApprovalRequest,
   DelegatedActionExecution,
   DelegatedActionExecutionStatus,
   DelegatedActionMetadata,
@@ -11,32 +12,97 @@ import {
   PendingDelegatedAction,
   PendingDelegatedActionUpdate,
   SecureActionExecutionResult,
+  StepUpRequirement,
 } from "../../src/types";
 import {
   deletePendingAction,
+  getApprovalRequestForSession,
+  getApprovalRequestsForSession,
+  getExecutionForSession,
   getExecutionsForSession,
+  getPendingActionForSession,
   getPendingActionsForSession,
+  getStepUpRequirementForSession,
+  getStepUpRequirementsForSession,
   storePendingAction,
   upsertExecution,
 } from "../runtime.store";
+import { RuntimeEnv, RuntimeSessionRecord } from "../runtime.types";
 import { githubActionService } from "./githubAction.service";
 import { gitlabActionService } from "./gitlabAction.service";
 import { slackActionService } from "./slackAction.service";
-import { RuntimeEnv, RuntimeSessionRecord } from "../runtime.types";
+import {
+  approveApprovalRequestForSession,
+  createApprovalRequestForPendingAction,
+  expireApprovalRequestsForSession,
+} from "./approval.service";
+import {
+  completeStepUpRequirementForSession,
+  createStepUpRequirementForPendingAction,
+} from "./stepUpAuth.service";
 
 export function createPendingActionForSession(options: {
+  env: RuntimeEnv;
   sessionId: string;
   input: DelegatedActionPreviewInput;
 }): PendingDelegatedAction {
-  const policy = getDelegatedActionPolicy(options.input.provider, options.input.actionKey);
+  const policy = getDelegatedActionPolicy(
+    options.input.provider,
+    options.input.actionKey,
+  );
   if (!policy) {
     throw new Error(
       `Unknown delegated action policy for ${options.input.provider}:${options.input.actionKey}.`,
     );
   }
 
-  const action = createPendingDelegatedAction(options.input, policy);
-  return storePendingAction(options.sessionId, action);
+  const now = Date.now();
+  let action = createPendingDelegatedAction(options.input, policy, now);
+  const executionId = `execution:${crypto.randomUUID()}`;
+  action = {
+    ...action,
+    delegatedActionExecutionId: executionId,
+  };
+
+  let approvalRequest: ApprovalRequest | undefined;
+  let stepUpRequirement: StepUpRequirement | undefined;
+
+  if (policy.requiresApproval) {
+    approvalRequest = createApprovalRequestForPendingAction({
+      env: options.env,
+      sessionId: options.sessionId,
+      pendingAction: action,
+      policy,
+      delegatedActionExecutionId: executionId,
+      now,
+    });
+    action.approvalRequestId = approvalRequest.id;
+  }
+
+  if (policy.requiresStepUp) {
+    stepUpRequirement = createStepUpRequirementForPendingAction({
+      sessionId: options.sessionId,
+      pendingAction: action,
+      policy,
+      delegatedActionExecutionId: executionId,
+      now,
+    });
+    action.stepUpRequirementId = stepUpRequirement.id;
+  }
+
+  const execution = buildInitialExecution(action, {
+    mode: deriveExecutionMode(options.env, action.provider),
+    status: mapPendingStatusToExecutionStatus(action.status),
+    summary: summarizePendingAction(action),
+    metadata: action.metadata ?? "{}",
+    createdAt: now,
+    approvalRequestId: approvalRequest?.id,
+    stepUpRequirementId: stepUpRequirement?.id,
+  });
+
+  storePendingAction(options.sessionId, action);
+  upsertExecution(options.sessionId, execution);
+  return action;
 }
 
 export function updatePendingActionForSession(options: {
@@ -58,125 +124,237 @@ export async function executePendingActionForSession(options: {
   session: RuntimeSessionRecord;
   pendingAction: PendingDelegatedAction;
 }): Promise<SecureActionExecutionResult> {
-  const { env, session, pendingAction } = options;
-  const now = Date.now();
-  const blockedExecution = buildInitialExecution(pendingAction, {
-    mode: deriveExecutionMode(env, pendingAction.provider),
-    status: "blocked",
-    summary: pendingAction.summary,
-    metadata: pendingAction.metadata ?? "{}",
-    createdAt: now,
+  expireApprovalRequestsForSession(options.session.id);
+
+  const pendingAction =
+    getPendingActionForSession(options.session.id, options.pendingAction.id)
+    ?? options.pendingAction;
+  const approvalRequest = pendingAction.approvalRequestId
+    ? getApprovalRequestForSession(options.session.id, pendingAction.approvalRequestId)
+    : undefined;
+  const stepUpRequirement = pendingAction.stepUpRequirementId
+    ? getStepUpRequirementForSession(
+        options.session.id,
+        pendingAction.stepUpRequirementId,
+      )
+    : undefined;
+  const existingExecution = pendingAction.delegatedActionExecutionId
+    ? getExecutionForSession(
+        options.session.id,
+        pendingAction.delegatedActionExecutionId,
+      )
+    : undefined;
+
+  let execution =
+    existingExecution
+    ?? buildInitialExecution(pendingAction, {
+      mode: deriveExecutionMode(options.env, pendingAction.provider),
+      status: mapPendingStatusToExecutionStatus(pendingAction.status),
+      summary: summarizePendingAction(pendingAction),
+      metadata: pendingAction.metadata ?? "{}",
+      createdAt: Date.now(),
+      approvalRequestId: approvalRequest?.id,
+      stepUpRequirementId: stepUpRequirement?.id,
+    });
+
+  if (
+    options.env.liveAuthMode
+    && options.session.runtimeMode === "live"
+    && options.session.status !== "authenticated"
+  ) {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "blocked",
+      summary: "Authentication is required before DevPilot can act on your behalf.",
+      log: "[SECURE_ACTION] Blocked because the user is not authenticated.",
+    });
+  }
+
+  if (
+    pendingAction.approvalStatus === "pending"
+    || pendingAction.status === "awaiting_approval"
+  ) {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "awaiting_approval",
+      summary: "This action is waiting for explicit approval.",
+      log: "[SECURE_ACTION] Execution paused while waiting for approval.",
+    });
+  }
+
+  if (pendingAction.approvalStatus === "rejected" || pendingAction.status === "rejected") {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "rejected",
+      summary: "This action was rejected and cannot be executed.",
+      log: "[SECURE_ACTION] Blocked because approval was rejected.",
+      completedAt: Date.now(),
+    });
+  }
+
+  if (pendingAction.approvalStatus === "expired" || pendingAction.status === "expired") {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "expired",
+      summary: "This action can no longer run because its approval request expired.",
+      log: "[SECURE_ACTION] Blocked because approval expired.",
+      completedAt: Date.now(),
+    });
+  }
+
+  if (pendingAction.approvalStatus === "cancelled" || pendingAction.status === "cancelled") {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "cancelled",
+      summary: "This action was cancelled and will not run.",
+      log: "[SECURE_ACTION] Blocked because the approval request was cancelled.",
+      completedAt: Date.now(),
+    });
+  }
+
+  if (
+    pendingAction.stepUpStatus === "required"
+    || pendingAction.stepUpStatus === "in_progress"
+    || pendingAction.status === "awaiting_step_up"
+  ) {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "awaiting_step_up",
+      summary: "Step-up authentication is required before this action can run.",
+      log: "[SECURE_ACTION] Execution paused while waiting for step-up authentication.",
+    });
+  }
+
+  if (pendingAction.stepUpStatus === "failed") {
+    return finalizeBlockedExecution(options.session.id, {
+      execution,
+      pendingAction,
+      approvalRequest,
+      stepUpRequirement,
+      status: "blocked",
+      summary: "Step-up authentication failed, so the action cannot proceed.",
+      log: "[SECURE_ACTION] Blocked because step-up authentication failed.",
+      completedAt: Date.now(),
+    });
+  }
+
+  const executingPendingAction = storePendingAction(options.session.id, {
+    ...pendingAction,
+    status: "executing",
+    updatedAt: Date.now(),
   });
-
-  if (env.liveAuthMode && session.runtimeMode === "live" && session.status !== "authenticated") {
-    return finalizeBlockedExecution(
-      session.id,
-      blockedExecution,
-      "Authentication is required before DevPilot can act on your behalf.",
-      ["[SECURE_ACTION] Blocked because the user is not authenticated."],
-      pendingAction,
-    );
-  }
-
-  if (pendingAction.approvalStatus === "pending") {
-    return finalizeBlockedExecution(
-      session.id,
-      blockedExecution,
-      "This action is still waiting for explicit approval.",
-      ["[SECURE_ACTION] Blocked because approval is still pending."],
-      pendingAction,
-    );
-  }
-
-  if (pendingAction.approvalStatus === "rejected") {
-    return finalizeBlockedExecution(
-      session.id,
-      blockedExecution,
-      "This action was rejected and cannot be executed.",
-      ["[SECURE_ACTION] Blocked because approval was rejected."],
-      pendingAction,
-    );
-  }
-
-  if (pendingAction.stepUpStatus === "required") {
-    return finalizeBlockedExecution(
-      session.id,
-      blockedExecution,
-      "Step-up authentication is required before this high-risk action can run.",
-      ["[SECURE_ACTION] Blocked because step-up authentication is required."],
-      pendingAction,
-    );
-  }
-
-  const runningExecution = upsertExecution(session.id, {
-    ...blockedExecution,
+  execution = upsertExecution(options.session.id, {
+    ...execution,
     status: "running",
-    logs: ["[SECURE_ACTION] Validated approval and dispatching provider action."],
-    updatedAt: now,
+    summary: `Executing ${pendingAction.title} through the secure backend boundary.`,
+    logs: [
+      ...execution.logs,
+      "[SECURE_ACTION] Governance checks passed. Dispatching provider action.",
+    ],
+    updatedAt: Date.now(),
   });
 
   try {
     const outcome = await dispatchProviderAction({
-      env,
-      session,
-      pendingAction,
+      env: options.env,
+      session: options.session,
+      pendingAction: executingPendingAction,
     });
 
     const completedExecution: DelegatedActionExecution = {
-      ...runningExecution,
+      ...execution,
       mode: outcome.mode,
       status: outcome.status,
       summary: outcome.summary,
-      logs: outcome.logs,
+      logs: [...execution.logs, ...outcome.logs],
       externalRef: outcome.externalRef,
       externalUrl: outcome.externalUrl,
       metadata: JSON.stringify(outcome.metadata ?? {}),
       updatedAt: Date.now(),
       completedAt:
-        outcome.status === "completed" || outcome.status === "failed" || outcome.status === "blocked"
+        outcome.status === "completed"
+        || outcome.status === "failed"
+        || outcome.status === "blocked"
           ? Date.now()
           : undefined,
     };
 
-    upsertExecution(session.id, completedExecution);
+    upsertExecution(options.session.id, completedExecution);
+
     if (outcome.status === "completed") {
-      deletePendingAction(session.id, pendingAction.id);
+      deletePendingAction(options.session.id, executingPendingAction.id);
+      return {
+        ok: true,
+        execution: completedExecution,
+        approvalRequest,
+        stepUpRequirement,
+        executionMode: outcome.mode === "fallback" ? "dry_run" : "deferred",
+        message: outcome.summary,
+      };
     }
 
+    const retainedPendingAction = storePendingAction(options.session.id, {
+      ...executingPendingAction,
+      status: "blocked",
+      updatedAt: Date.now(),
+    });
+
     return {
-      ok: outcome.status === "completed",
-      pendingAction:
-        outcome.status === "completed" ? undefined : pendingAction,
+      ok: false,
+      pendingAction: retainedPendingAction,
       execution: completedExecution,
-      executionMode:
-        outcome.status === "blocked"
-          ? "blocked"
-          : outcome.mode === "fallback"
-            ? "dry_run"
-            : "deferred",
+      approvalRequest,
+      stepUpRequirement,
+      executionMode: outcome.status === "blocked" ? "blocked" : "deferred",
       message: outcome.summary,
     };
   } catch (error) {
     const failedExecution: DelegatedActionExecution = {
-      ...runningExecution,
+      ...execution,
       status: "failed",
       summary:
         error instanceof Error
           ? error.message
           : "Delegated action failed unexpectedly.",
       logs: [
-        ...runningExecution.logs,
+        ...execution.logs,
         error instanceof Error ? error.message : String(error),
       ],
       updatedAt: Date.now(),
       completedAt: Date.now(),
     };
 
-    upsertExecution(session.id, failedExecution);
+    const blockedPendingAction = storePendingAction(options.session.id, {
+      ...executingPendingAction,
+      status: "blocked",
+      updatedAt: Date.now(),
+    });
+
+    upsertExecution(options.session.id, failedExecution);
     return {
       ok: false,
-      pendingAction,
+      pendingAction: blockedPendingAction,
       execution: failedExecution,
+      approvalRequest,
+      stepUpRequirement,
       executionMode: "blocked",
       message: failedExecution.summary,
     };
@@ -186,11 +364,30 @@ export async function executePendingActionForSession(options: {
 export function getRuntimeActionState(sessionId: string): {
   pendingActions: PendingDelegatedAction[];
   executions: DelegatedActionExecution[];
+  approvalRequests: ApprovalRequest[];
+  stepUpRequirements: StepUpRequirement[];
 } {
+  expireApprovalRequestsForSession(sessionId);
   return {
     pendingActions: getPendingActionsForSession(sessionId),
     executions: getExecutionsForSession(sessionId),
+    approvalRequests: getApprovalRequestsForSession(sessionId),
+    stepUpRequirements: getStepUpRequirementsForSession(sessionId),
   };
+}
+
+export function approvePendingActionForSession(options: {
+  sessionId: string;
+  approvalRequestId: string;
+}) {
+  return approveApprovalRequestForSession(options);
+}
+
+export function completePendingActionStepUpForSession(options: {
+  sessionId: string;
+  stepUpRequirementId: string;
+}) {
+  return completeStepUpRequirementForSession(options);
 }
 
 function buildInitialExecution(
@@ -201,10 +398,12 @@ function buildInitialExecution(
     summary: string;
     metadata: string;
     createdAt: number;
+    approvalRequestId?: string;
+    stepUpRequirementId?: string;
   },
 ): DelegatedActionExecution {
   return {
-    id: `execution:${crypto.randomUUID()}`,
+    id: pendingAction.delegatedActionExecutionId ?? `execution:${crypto.randomUUID()}`,
     taskId: pendingAction.taskId,
     provider: pendingAction.provider as DelegatedActionExecution["provider"],
     actionKey: pendingAction.actionKey,
@@ -213,8 +412,12 @@ function buildInitialExecution(
     status: args.status,
     approvalStatus: pendingAction.approvalStatus,
     stepUpStatus: pendingAction.stepUpStatus,
+    approvalRequestId: args.approvalRequestId,
+    stepUpRequirementId: args.stepUpRequirementId,
     summary: args.summary,
-    logs: [],
+    logs: [
+      `[SECURE_ACTION] Proposed ${pendingAction.actionKey} with scopes: ${pendingAction.requiredScopes.join(", ") || "none"}.`,
+    ],
     metadata: args.metadata,
     createdAt: args.createdAt,
     updatedAt: args.createdAt,
@@ -223,26 +426,35 @@ function buildInitialExecution(
 
 function finalizeBlockedExecution(
   sessionId: string,
-  execution: DelegatedActionExecution,
-  summary: string,
-  logs: string[],
-  pendingAction: PendingDelegatedAction,
+  options: {
+    execution: DelegatedActionExecution;
+    pendingAction: PendingDelegatedAction;
+    approvalRequest?: ApprovalRequest;
+    stepUpRequirement?: StepUpRequirement;
+    status: DelegatedActionExecution["status"];
+    summary: string;
+    log: string;
+    completedAt?: number;
+  },
 ): SecureActionExecutionResult {
   const nextExecution: DelegatedActionExecution = {
-    ...execution,
-    summary,
-    logs,
+    ...options.execution,
+    status: options.status,
+    summary: options.summary,
+    logs: [...options.execution.logs, options.log],
     updatedAt: Date.now(),
-    completedAt: Date.now(),
+    completedAt: options.completedAt,
   };
 
   upsertExecution(sessionId, nextExecution);
   return {
     ok: false,
-    pendingAction,
+    pendingAction: options.pendingAction,
     execution: nextExecution,
+    approvalRequest: options.approvalRequest,
+    stepUpRequirement: options.stepUpRequirement,
     executionMode: "blocked",
-    message: summary,
+    message: options.summary,
   };
 }
 
@@ -266,7 +478,9 @@ async function dispatchProviderAction(options: {
     case "slack":
       return slackActionService.executeAction(options.pendingAction.actionKey, context);
     default:
-      throw new Error(`Unsupported delegated action provider '${options.pendingAction.provider}'.`);
+      throw new Error(
+        `Unsupported delegated action provider '${options.pendingAction.provider}'.`,
+      );
   }
 }
 
@@ -299,4 +513,43 @@ function deriveExecutionMode(
   }
 
   return "fallback";
+}
+
+function mapPendingStatusToExecutionStatus(
+  status: PendingDelegatedAction["status"],
+): DelegatedActionExecution["status"] {
+  switch (status) {
+    case "awaiting_approval":
+      return "awaiting_approval";
+    case "awaiting_step_up":
+      return "awaiting_step_up";
+    case "approved":
+      return "approved";
+    case "rejected":
+      return "rejected";
+    case "expired":
+      return "expired";
+    case "cancelled":
+      return "cancelled";
+    case "blocked":
+      return "blocked";
+    default:
+      return "proposed";
+  }
+}
+
+function summarizePendingAction(action: PendingDelegatedAction): string {
+  if (action.status === "awaiting_approval") {
+    return `Awaiting approval for ${action.title}.`;
+  }
+
+  if (action.status === "awaiting_step_up") {
+    return `Awaiting step-up authentication for ${action.title}.`;
+  }
+
+  if (action.status === "approved") {
+    return `${action.title} is approved and ready to execute.`;
+  }
+
+  return `Prepared delegated action: ${action.title}.`;
 }

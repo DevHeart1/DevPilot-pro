@@ -103,7 +103,15 @@ export interface AgentEvent {
   | "RUN_COMPLETED"
   | "RUN_FAILED"
   | "REPOSITORY_ACTION"
-  | "WEBHOOK_EVENT_RECEIVED";
+  | "WEBHOOK_EVENT_RECEIVED"
+  | "APPROVAL_REQUESTED"
+  | "APPROVAL_APPROVED"
+  | "APPROVAL_REJECTED"
+  | "APPROVAL_EXPIRED"
+  | "STEP_UP_REQUIRED"
+  | "STEP_UP_STARTED"
+  | "STEP_UP_COMPLETED"
+  | "STEP_UP_FAILED";
   title: string;
   description: string;
   metadata: string;
@@ -220,3 +228,4 @@ export * from './gitlab-repository';
 export * from './code-review';
 export * from './auth-integrations';
 export * from './delegated-actions';
+export * from './approvals';

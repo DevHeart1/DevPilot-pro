@@ -4,6 +4,7 @@ import express, { Request, Response } from "express";
 import { setSession, getSession, deleteSession } from "./runtime.store";
 import { createRuntimeEnv } from "./runtimeEnv";
 import { createActionsRouter } from "./routes/actions";
+import { createApprovalsRouter } from "./routes/approvals";
 import { createAuthRouter } from "./routes/auth";
 import { createIntegrationsRouter } from "./routes/integrations";
 import { RuntimeSessionRecord } from "./runtime.types";
@@ -51,6 +52,12 @@ app.use(
 );
 app.use(
   createActionsRouter({
+    env,
+    getSession: getOrCreateSession,
+  }),
+);
+app.use(
+  createApprovalsRouter({
     env,
     getSession: getOrCreateSession,
   }),

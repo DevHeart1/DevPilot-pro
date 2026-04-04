@@ -13,10 +13,16 @@ export type DelegatedActionProvider = Extract<
 export type DelegatedActionExecutionMode = "live" | "fallback";
 
 export type DelegatedActionExecutionStatus =
-  | "pending"
+  | "proposed"
+  | "awaiting_approval"
+  | "awaiting_step_up"
+  | "approved"
   | "running"
   | "completed"
   | "failed"
+  | "rejected"
+  | "expired"
+  | "cancelled"
   | "blocked";
 
 export type DelegatedActionMetadataValue =
@@ -43,6 +49,8 @@ export interface DelegatedActionExecution {
   status: DelegatedActionExecutionStatus;
   approvalStatus: PendingApprovalStatus;
   stepUpStatus: PendingStepUpStatus;
+  approvalRequestId?: string;
+  stepUpRequirementId?: string;
   summary: string;
   logs: string[];
   externalRef?: string;

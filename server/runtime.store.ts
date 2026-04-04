@@ -1,17 +1,23 @@
 import {
+  ApprovalRequest,
   DelegatedActionExecution,
   PendingDelegatedAction,
+  StepUpRequirement,
 } from "../src/types";
 import {
+  RuntimeApprovalRequestRecord,
   LoginStateRecord,
   RuntimeExecutionRecord,
   RuntimePendingActionRecord,
   RuntimeSessionRecord,
+  RuntimeStepUpRequirementRecord,
 } from "./runtime.types";
 
 const sessionStore = new Map<string, RuntimeSessionRecord>();
 const pendingActionStore = new Map<string, RuntimePendingActionRecord>();
 const executionStore = new Map<string, RuntimeExecutionRecord>();
+const approvalRequestStore = new Map<string, RuntimeApprovalRequestRecord>();
+const stepUpRequirementStore = new Map<string, RuntimeStepUpRequirementRecord>();
 const loginStateStore = new Map<string, LoginStateRecord>();
 
 export function getSession(sessionId: string): RuntimeSessionRecord | undefined {
@@ -26,6 +32,8 @@ export function setSession(session: RuntimeSessionRecord): RuntimeSessionRecord 
 export function deleteSession(sessionId: string): void {
   sessionStore.delete(sessionId);
   prunePendingActionsForSession(sessionId);
+  pruneApprovalRequestsForSession(sessionId);
+  pruneStepUpRequirementsForSession(sessionId);
 }
 
 export function setLoginState(
@@ -90,12 +98,68 @@ export function prunePendingActionsForSession(sessionId: string): void {
   }
 }
 
+export function storeApprovalRequest(
+  sessionId: string,
+  approvalRequest: ApprovalRequest,
+): ApprovalRequest {
+  approvalRequestStore.set(approvalRequest.id, { sessionId, approvalRequest });
+  return approvalRequest;
+}
+
+export function getApprovalRequestForSession(
+  sessionId: string,
+  approvalRequestId: string,
+): ApprovalRequest | undefined {
+  const record = approvalRequestStore.get(approvalRequestId);
+  if (!record || record.sessionId !== sessionId) {
+    return undefined;
+  }
+
+  return record.approvalRequest;
+}
+
+export function getApprovalRequestsForSession(sessionId: string): ApprovalRequest[] {
+  return Array.from(approvalRequestStore.values())
+    .filter((record) => record.sessionId === sessionId)
+    .map((record) => record.approvalRequest)
+    .sort((left, right) => right.requestedAt - left.requestedAt);
+}
+
+export function getApprovalRequestByPendingAction(
+  sessionId: string,
+  pendingActionId: string,
+): ApprovalRequest | undefined {
+  return getApprovalRequestsForSession(sessionId).find(
+    (approvalRequest) => approvalRequest.pendingActionId === pendingActionId,
+  );
+}
+
+export function pruneApprovalRequestsForSession(sessionId: string): void {
+  for (const [approvalId, record] of approvalRequestStore.entries()) {
+    if (record.sessionId === sessionId) {
+      approvalRequestStore.delete(approvalId);
+    }
+  }
+}
+
 export function upsertExecution(
   sessionId: string,
   execution: DelegatedActionExecution,
 ): DelegatedActionExecution {
   executionStore.set(execution.id, { sessionId, execution });
   return execution;
+}
+
+export function getExecutionForSession(
+  sessionId: string,
+  executionId: string,
+): DelegatedActionExecution | undefined {
+  const record = executionStore.get(executionId);
+  if (!record || record.sessionId !== sessionId) {
+    return undefined;
+  }
+
+  return record.execution;
 }
 
 export function getExecutionsForSession(
@@ -106,4 +170,53 @@ export function getExecutionsForSession(
     .map((record) => record.execution)
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, 30);
+}
+
+export function storeStepUpRequirement(
+  sessionId: string,
+  stepUpRequirement: StepUpRequirement,
+): StepUpRequirement {
+  stepUpRequirementStore.set(stepUpRequirement.id, {
+    sessionId,
+    stepUpRequirement,
+  });
+  return stepUpRequirement;
+}
+
+export function getStepUpRequirementForSession(
+  sessionId: string,
+  stepUpRequirementId: string,
+): StepUpRequirement | undefined {
+  const record = stepUpRequirementStore.get(stepUpRequirementId);
+  if (!record || record.sessionId !== sessionId) {
+    return undefined;
+  }
+
+  return record.stepUpRequirement;
+}
+
+export function getStepUpRequirementsForSession(
+  sessionId: string,
+): StepUpRequirement[] {
+  return Array.from(stepUpRequirementStore.values())
+    .filter((record) => record.sessionId === sessionId)
+    .map((record) => record.stepUpRequirement)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+export function getStepUpRequirementByPendingAction(
+  sessionId: string,
+  pendingActionId: string,
+): StepUpRequirement | undefined {
+  return getStepUpRequirementsForSession(sessionId).find(
+    (stepUpRequirement) => stepUpRequirement.pendingActionId === pendingActionId,
+  );
+}
+
+export function pruneStepUpRequirementsForSession(sessionId: string): void {
+  for (const [stepUpId, record] of stepUpRequirementStore.entries()) {
+    if (record.sessionId === sessionId) {
+      stepUpRequirementStore.delete(stepUpId);
+    }
+  }
 }

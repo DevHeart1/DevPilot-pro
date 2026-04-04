@@ -32,6 +32,8 @@ export function createIntegrationsRouter(options: {
       session,
       pendingActions: runtimeState.pendingActions,
       executions: runtimeState.executions,
+      approvalRequests: runtimeState.approvalRequests,
+      stepUpRequirements: runtimeState.stepUpRequirements,
     });
     response.json({ data: snapshot });
   });
@@ -44,6 +46,8 @@ export function createIntegrationsRouter(options: {
       session,
       pendingActions: runtimeState.pendingActions,
       executions: runtimeState.executions,
+      approvalRequests: runtimeState.approvalRequests,
+      stepUpRequirements: runtimeState.stepUpRequirements,
     });
     response.json({
       data: {

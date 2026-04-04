@@ -93,6 +93,8 @@ export * from './codeReviewDiscovery.service';
 export * from './integrationPermissions.service';
 export * from './pendingDelegatedAction.service';
 export * from './delegatedActionExecution.service';
+export * from './pendingApproval.service';
+export * from './stepUpRequirement.service';
 export * from './secureAction.service';
 
 export * from './gitlabDuo.service';

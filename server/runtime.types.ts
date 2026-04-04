@@ -1,4 +1,5 @@
 import {
+  ApprovalRequest,
   AuthenticatedUserSummary,
   ConnectedIntegrationSource,
   ConnectedIntegrationStatus,
@@ -8,6 +9,7 @@ import {
   DelegatedActionMetadata,
   DelegatedActionProvider,
   PendingDelegatedAction,
+  StepUpRequirement,
 } from "../src/types";
 
 export type RuntimeMode = "live" | "fallback";
@@ -23,9 +25,14 @@ export interface RuntimeEnv {
   auth0Audience: string;
   liveAuthMode: boolean;
   liveDelegatedActionMode: boolean;
+  liveAsyncAuthorizationMode: boolean;
+  liveStepUpMode: boolean;
   liveGitHubActionMode: boolean;
   liveGitLabActionMode: boolean;
   liveSlackActionMode: boolean;
+  approvalTimeoutSeconds: number;
+  asyncAuthorizationCallbackUrl?: string;
+  stepUpCallbackUrl?: string;
   providerConnections: {
     github: string;
     gitlab: string;
@@ -66,6 +73,16 @@ export interface RuntimePendingActionRecord {
 export interface RuntimeExecutionRecord {
   sessionId: string;
   execution: DelegatedActionExecution;
+}
+
+export interface RuntimeApprovalRequestRecord {
+  sessionId: string;
+  approvalRequest: ApprovalRequest;
+}
+
+export interface RuntimeStepUpRequirementRecord {
+  sessionId: string;
+  stepUpRequirement: StepUpRequirement;
 }
 
 export interface LoginStateRecord {
