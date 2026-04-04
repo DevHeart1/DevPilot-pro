@@ -63,6 +63,12 @@ export interface UpsertDiscoveredIssuesInput {
   issues: Array<
     Omit<
       CodeReviewIssue,
+      | "repo"
+      | "repoName"
+      | "branch"
+      | "defaultBranch"
+      | "gitlabProjectId"
+      | "gitlabProjectWebUrl"
       | "id"
       | "status"
       | "linkedTaskId"

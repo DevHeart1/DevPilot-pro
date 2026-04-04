@@ -1,41 +1,83 @@
-export const getEnvVar = (key: string, defaultValue: string = ''): string => {
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key] as string;
+type EnvRecord = Record<string, string | undefined>;
+
+function getProcessEnv(): EnvRecord {
+  if (typeof process === "undefined" || !process.env) {
+    return {};
   }
-  // @ts-ignore - Vite compatibility
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
-    // @ts-ignore
-    return (import.meta as any).env[key] as string;
+
+  return process.env as EnvRecord;
+}
+
+function getImportMetaEnv(): EnvRecord {
+  if (typeof import.meta === "undefined") {
+    return {};
   }
+
+  return (import.meta.env ?? {}) as EnvRecord;
+}
+
+function readEnv(key: string, defaultValue = ""): string {
+  const processValue = getProcessEnv()[key];
+  if (processValue && processValue.length > 0) {
+    return processValue;
+  }
+
+  const viteValue = getImportMetaEnv()[key];
+  if (viteValue && viteValue.length > 0) {
+    return viteValue;
+  }
+
   return defaultValue;
-};
+}
+
+function readBooleanEnv(key: string, defaultValue = false): boolean {
+  return readEnv(key, String(defaultValue)) === "true";
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/$/, "");
+}
+
+export const getEnvVar = readEnv;
 
 export const config = {
-  liveDuoExecution: (import.meta as any).env.VITE_LIVE_DUO_EXECUTION === 'true',
-  gitlabDuoApiUrl: (import.meta as any).env.VITE_GITLAB_DUO_API_URL || 'https://gitlab.com/api/v4',
-  gitlabDuoToken: (import.meta as any).env.VITE_GITLAB_DUO_TOKEN || '',
-  liveMode: getEnvVar('VITE_LIVE_MODE', 'false') === 'true',
-  liveGitlabMode: getEnvVar('VITE_LIVE_GITLAB_MODE', 'false') === 'true',
-  sandboxUrl: getEnvVar('VITE_SANDBOX_URL', 'http://localhost:8080'),
-  targetAppBaseUrl: getEnvVar('VITE_TARGET_APP_BASE_URL', 'http://localhost:3000'),
+  liveDuoExecution: readBooleanEnv("VITE_LIVE_DUO_EXECUTION"),
+  gitlabDuoApiUrl: readEnv("VITE_GITLAB_DUO_API_URL", "https://gitlab.com/api/v4"),
+  gitlabDuoToken: readEnv("VITE_GITLAB_DUO_TOKEN"),
+  liveMode: readBooleanEnv("VITE_LIVE_MODE"),
+  liveGitlabMode: readBooleanEnv("VITE_LIVE_GITLAB_MODE"),
+  liveAuthMode: readBooleanEnv("VITE_LIVE_AUTH_MODE"),
+  liveDelegatedActionMode: readBooleanEnv("VITE_LIVE_DELEGATED_ACTION_MODE"),
+  sandboxUrl: readEnv("VITE_SANDBOX_URL", "http://localhost:8080"),
+  targetAppBaseUrl: readEnv("VITE_TARGET_APP_BASE_URL", "http://localhost:3000"),
+  secureActionBffUrl: stripTrailingSlash(
+    readEnv("VITE_SECURE_ACTION_BFF_URL", "http://localhost:3201"),
+  ),
 
-  // Gemini
-  geminiApiKey: getEnvVar('VITE_GEMINI_API_KEY'),
+  auth0Domain: readEnv("VITE_AUTH0_DOMAIN"),
+  auth0ClientId: readEnv("VITE_AUTH0_CLIENT_ID"),
+  auth0Audience: readEnv("VITE_AUTH0_AUDIENCE"),
 
-  // Browserbase
-  browserbaseApiKey: getEnvVar('VITE_BROWSERBASE_API_KEY'),
-  browserbaseProjectId: getEnvVar('VITE_BROWSERBASE_PROJECT_ID'),
+  tokenVaultProviders: {
+    githubConnection: readEnv("VITE_AUTH0_TOKEN_VAULT_GITHUB_CONNECTION"),
+    gitlabConnection: readEnv("VITE_AUTH0_TOKEN_VAULT_GITLAB_CONNECTION"),
+    slackConnection: readEnv("VITE_AUTH0_TOKEN_VAULT_SLACK_CONNECTION"),
+    googleConnection: readEnv("VITE_AUTH0_TOKEN_VAULT_GOOGLE_CONNECTION"),
+  },
 
-  // GitLab
-  gitlabUrl: getEnvVar('VITE_GITLAB_URL', 'https://gitlab.com'),
-  gitlabToken: getEnvVar('VITE_GITLAB_TOKEN'),
-  gitlabProjectId: getEnvVar('VITE_GITLAB_PROJECT_ID'),
-  gitlabDefaultBranch: getEnvVar('VITE_GITLAB_DEFAULT_BRANCH', 'main'),
+  geminiApiKey: readEnv("VITE_GEMINI_API_KEY"),
+  browserbaseApiKey: readEnv("VITE_BROWSERBASE_API_KEY"),
+  browserbaseProjectId: readEnv("VITE_BROWSERBASE_PROJECT_ID"),
 
-  // GitLab Repository Integration
-  liveRepositoryMode: getEnvVar('VITE_LIVE_REPOSITORY_MODE', 'false') === 'true',
-  liveEventMode: getEnvVar('VITE_LIVE_EVENT_MODE', 'false') === 'true',
-  webhookSecret: getEnvVar('VITE_GITLAB_WEBHOOK_SECRET'),
+  gitlabUrl: readEnv("VITE_GITLAB_URL", "https://gitlab.com"),
+  gitlabToken: readEnv("VITE_GITLAB_TOKEN"),
+  gitlabProjectId: readEnv("VITE_GITLAB_PROJECT_ID"),
+  gitlabDefaultBranch: readEnv("VITE_GITLAB_DEFAULT_BRANCH", "main"),
+
+  liveRepositoryMode: readBooleanEnv("VITE_LIVE_REPOSITORY_MODE"),
+  liveEventMode: readBooleanEnv("VITE_LIVE_EVENT_MODE"),
+  webhookSecret: readEnv("VITE_GITLAB_WEBHOOK_SECRET"),
+
   get isGitLabConfigured() {
     return !!(this.liveRepositoryMode && this.gitlabToken);
   },
@@ -47,5 +89,11 @@ export const config = {
   },
   get isSandboxConfigured() {
     return !!this.sandboxUrl;
+  },
+  get isAuth0Configured() {
+    return !!(this.liveAuthMode && this.auth0Domain && this.auth0ClientId);
+  },
+  get isSecureDelegatedActionConfigured() {
+    return !!(this.liveDelegatedActionMode && this.auth0Domain && this.auth0ClientId);
   },
 };

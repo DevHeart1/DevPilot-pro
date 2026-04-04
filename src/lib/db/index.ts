@@ -1,5 +1,30 @@
 import Dexie, { Table } from 'dexie';
-import { Task, AgentMessage, TaskArtifact, Memory, AgentRun, AgentEvent, RunStep, TaskMemoryHit, PatchProposal, PatchFile, VerificationPlan, VerificationResult, VerificationEvidence, DuoFlowRun, DuoAgentInvocation, GitLabRepositoryAction, GitLabMergeRequestRecord, GitLabPipelineRecord, CodeReviewIssue, CodeReviewBatch } from '../../types';
+import {
+  AgentEvent,
+  AgentMessage,
+  AgentRun,
+  AuthSessionSnapshot,
+  CodeReviewBatch,
+  CodeReviewIssue,
+  ConnectedIntegration,
+  DelegatedActionPolicy,
+  DuoAgentInvocation,
+  DuoFlowRun,
+  GitLabMergeRequestRecord,
+  GitLabPipelineRecord,
+  GitLabRepositoryAction,
+  Memory,
+  PatchFile,
+  PatchProposal,
+  PendingDelegatedAction,
+  RunStep,
+  Task,
+  TaskArtifact,
+  TaskMemoryHit,
+  VerificationEvidence,
+  VerificationPlan,
+  VerificationResult,
+} from '../../types';
 
 export class DevPilotDB extends Dexie {
   tasks!: Table<Task>;
@@ -22,6 +47,10 @@ export class DevPilotDB extends Dexie {
   gitlabPipelineRecords!: Table<GitLabPipelineRecord>;
   codeReviewIssues!: Table<CodeReviewIssue>;
   codeReviewBatches!: Table<CodeReviewBatch>;
+  authSessions!: Table<AuthSessionSnapshot>;
+  connectedIntegrations!: Table<ConnectedIntegration>;
+  delegatedActionPolicies!: Table<DelegatedActionPolicy>;
+  pendingDelegatedActions!: Table<PendingDelegatedAction>;
 
   constructor() {
     super('DevPilotDB');
@@ -197,6 +226,33 @@ export class DevPilotDB extends Dexie {
       gitlabPipelineRecords: 'id, taskId, proposalId, pipelineId, status',
       codeReviewIssues: 'id, status, category, source, repo, branch, score, createdAt, updatedAt, dedupeKey, linkedTaskId, [repo+branch], [repo+branch+category]',
       codeReviewBatches: 'id, repo, branch, discoveryMode, createdAt, updatedAt, [repo+branch]'
+    });
+
+    this.version(11).stores({
+      tasks: 'id, category, status, createdAt',
+      agentMessages: 'id, taskId, timestamp',
+      taskArtifacts: 'id, [taskId+type]',
+      memories: 'id, scope, createdAt',
+      agentRuns: 'id, taskId, status',
+      agentEvents: 'id, taskId, timestamp',
+      runSteps: 'id, runId, taskId, order',
+      taskMemoryHits: 'id, taskId, memoryId',
+      patchProposals: 'id, taskId, status',
+      patchFiles: 'id, proposalId, taskId',
+      verificationPlans: 'id, taskId, proposalId',
+      verificationResults: 'id, taskId, proposalId, status',
+      verificationEvidences: 'id, verificationResultId, taskId, type',
+      duoFlowRuns: 'id, taskId, flowRunId, flowDefinitionId, status, createdAt',
+      duoAgentInvocations: 'id, flowRunId, taskId, agentRole, stepKey, invocationStatus',
+      gitlabRepositoryActions: 'id, taskId, proposalId, actionType, status',
+      gitlabMergeRequestRecords: 'id, taskId, proposalId, mergeRequestIid',
+      gitlabPipelineRecords: 'id, taskId, proposalId, pipelineId, status',
+      codeReviewIssues: 'id, status, category, source, repo, branch, score, createdAt, updatedAt, dedupeKey, linkedTaskId, [repo+branch], [repo+branch+category]',
+      codeReviewBatches: 'id, repo, branch, discoveryMode, createdAt, updatedAt, [repo+branch]',
+      authSessions: 'id, status, runtimeMode, updatedAt',
+      connectedIntegrations: 'id, provider, status, source, updatedAt',
+      delegatedActionPolicies: 'id, provider, actionKey, riskLevel',
+      pendingDelegatedActions: 'id, taskId, provider, actionKey, riskLevel, approvalStatus, stepUpStatus, updatedAt, [provider+actionKey]'
     });
   }
 }

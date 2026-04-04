@@ -1,22 +1,40 @@
-import React, { useState } from 'react';
-
-interface UserConfig {
-  targetAppBaseUrl: string;
-  gitlabDefaultBranch: string;
-}
+import React, { useEffect, useState } from 'react';
+import { SecureDelegationSettingsPanel } from '../components/settings/SecureDelegationSettingsPanel';
+import { SecureRuntimeState, UserConfig } from '../hooks/useTaskHub';
+import { DelegatedActionPreviewInput, PendingDelegatedAction, SecureActionExecutionResult } from '../types';
 
 export const Settings = ({
   onBack,
   userConfig,
-  onUpdateConfig
+  onUpdateConfig,
+  secureRuntimeState,
+  onRefreshSecureRuntime,
+  onPreviewDelegatedAction,
+  onApprovePendingAction,
+  onRejectPendingAction,
+  onExecutePendingAction,
+  onLogin,
+  onLogout,
 }: {
   onBack: () => void;
   userConfig: UserConfig;
   onUpdateConfig: (config: UserConfig) => void;
+  secureRuntimeState: SecureRuntimeState;
+  onRefreshSecureRuntime: () => Promise<void>;
+  onPreviewDelegatedAction: (input: DelegatedActionPreviewInput) => Promise<PendingDelegatedAction | null>;
+  onApprovePendingAction: (id: string) => Promise<PendingDelegatedAction | null>;
+  onRejectPendingAction: (id: string) => Promise<PendingDelegatedAction | null>;
+  onExecutePendingAction: (id: string) => Promise<SecureActionExecutionResult | null>;
+  onLogin: (returnTo?: string) => void;
+  onLogout: (returnTo?: string) => void;
 }) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isSaved, setIsSaved] = useState(false);
   const [tempConfig, setTempConfig] = useState(userConfig);
+
+  useEffect(() => {
+    setTempConfig(userConfig);
+  }, [userConfig]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +75,7 @@ export const Settings = ({
             <button onClick={() => setActiveTab('integrations')} className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-colors ${activeTab === 'integrations' ? 'bg-primary/10 text-primary font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}>Integrations</button>
           </nav>
         </aside>
-        <main className="flex-1 max-w-2xl">
+        <main className="flex-1 max-w-3xl">
           {activeTab === 'profile' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div>
@@ -222,38 +240,16 @@ export const Settings = ({
                 </form>
               </div>
 
-              <div>
-                <h3 className="text-xl font-bold text-white mb-1">Connected Apps</h3>
-                <p className="text-sm text-slate-400 mb-8">Manage services connected to your DevPilot account.</p>
-
-                <div className="space-y-4 opacity-50 pointer-events-none">
-                  <div className="flex items-center justify-between p-5 rounded-xl border border-border-subtle bg-surface/30">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded bg-white flex items-center justify-center">
-                        <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-white">GitHub</h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Connected as @alexdev</p>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 text-sm font-medium text-slate-400">Disconnect</button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-5 rounded-xl border border-border-subtle bg-surface/30">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded bg-[#E50914] flex items-center justify-center text-white font-bold text-xl">
-                        G
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-white">GitLab</h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Active via Token</p>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 bg-surface-dark border border-border-subtle rounded-lg text-sm font-medium">Configured</button>
-                  </div>
-                </div>
-              </div>
+              <SecureDelegationSettingsPanel
+                secureRuntimeState={secureRuntimeState}
+                onRefreshSecureRuntime={onRefreshSecureRuntime}
+                onPreviewDelegatedAction={onPreviewDelegatedAction}
+                onApprovePendingAction={onApprovePendingAction}
+                onRejectPendingAction={onRejectPendingAction}
+                onExecutePendingAction={onExecutePendingAction}
+                onLogin={onLogin}
+                onLogout={onLogout}
+              />
             </div>
           )}
         </main>

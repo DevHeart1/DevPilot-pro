@@ -2,18 +2,28 @@ import { useState, useEffect, useCallback } from "react";
 import { sandboxAdapter } from "../lib/adapters/sandbox.adapter";
 import { gitlabRepositoryAdapter } from "../lib/adapters/gitlabRepository.adapter";
 import { gitlabDuoAdapter } from "../lib/adapters/gitlabDuo.adapter";
+import { secureActionAdapter } from "../lib/adapters/secureAction.adapter";
 import { config } from "../lib/config/env";
 import { initializeDb } from "../lib/seeds";
 import {
     codeReviewIssueService,
+    integrationPermissionsService,
+    pendingDelegatedActionService,
     taskService,
     runService,
 } from "../lib/services";
 import { devpilotFlow } from "../lib/gitlab-duo/flows/devpilot.flow";
 import { runBackgroundCodeReviewDiscoveryWorkflow } from "../lib/workflows/backgroundCodeReviewDiscovery.workflow";
 import {
+    AuthSessionSnapshot,
+    ConnectedIntegration,
+    DelegatedActionPolicy,
+    DelegatedActionPreviewInput,
     GitLabBranchSummary,
     GitLabProjectSummary,
+    PendingDelegatedAction,
+    SecureActionExecutionResult,
+    SecureRuntimeMode,
     Task,
 } from "../types";
 
@@ -29,6 +39,17 @@ export interface IntegrationState {
     project?: GitLabProjectSummary;
     branches: GitLabBranchSummary[];
     availableProjects: GitLabProjectSummary[];
+}
+
+export interface SecureRuntimeState {
+    loading: boolean;
+    session?: AuthSessionSnapshot;
+    integrations: ConnectedIntegration[];
+    policies: DelegatedActionPolicy[];
+    pendingActions: PendingDelegatedAction[];
+    runtimeMode: SecureRuntimeMode;
+    warnings: string[];
+    updatedAt?: number;
 }
 
 const CONFIG_STORAGE_KEY = "devpilot_user_config";
@@ -60,6 +81,14 @@ export const useTaskHub = () => {
     const [selectedBranch, setSelectedBranch] = useState("");
     const [isCreatingTask, setIsCreatingTask] = useState(false);
     const [dashboardError, setDashboardError] = useState<string | null>(null);
+    const [secureRuntimeState, setSecureRuntimeState] = useState<SecureRuntimeState>({
+        loading: true,
+        integrations: [],
+        policies: [],
+        pendingActions: [],
+        runtimeMode: "mock",
+        warnings: [],
+    });
 
     const [userConfig, setUserConfig] = useState<UserConfig>(() => {
         const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
@@ -156,6 +185,26 @@ export const useTaskHub = () => {
         });
     }, [selectedProjectId, userConfig.targetAppBaseUrl]);
 
+    const loadSecureRuntimeState = useCallback(async () => {
+        setSecureRuntimeState((current) => ({ ...current, loading: true }));
+        await initializeDb();
+
+        const snapshot = await secureActionAdapter.getRuntimeSnapshot();
+        await integrationPermissionsService.hydrateRuntimeSnapshot(snapshot);
+        await pendingDelegatedActionService.replacePendingActions(snapshot.pendingActions);
+
+        setSecureRuntimeState({
+            loading: false,
+            session: snapshot.session,
+            integrations: snapshot.integrations,
+            policies: snapshot.policies,
+            pendingActions: snapshot.pendingActions,
+            runtimeMode: snapshot.runtimeMode,
+            warnings: snapshot.warnings,
+            updatedAt: snapshot.updatedAt,
+        });
+    }, []);
+
     const handleProjectChange = async (projectId: string | number) => {
         setSelectedProjectId(projectId);
         setIntegrationState(prev => ({ ...prev, loading: true }));
@@ -183,6 +232,10 @@ export const useTaskHub = () => {
     useEffect(() => {
         void loadIntegrationState();
     }, [loadIntegrationState]);
+
+    useEffect(() => {
+        void loadSecureRuntimeState();
+    }, [loadSecureRuntimeState]);
 
     useEffect(() => {
         if (!integrationState.project) {
@@ -368,6 +421,64 @@ export const useTaskHub = () => {
         return taskId;
     }, [createTaskFromSeed]);
 
+    const previewDelegatedAction = useCallback(async (input: DelegatedActionPreviewInput) => {
+        try {
+            setDashboardError(null);
+            const pendingAction = await secureActionAdapter.previewDelegatedAction(input);
+            await pendingDelegatedActionService.upsertPendingAction(pendingAction);
+            await loadSecureRuntimeState();
+            return pendingAction;
+        } catch (error) {
+            setDashboardError(error instanceof Error ? error.message : String(error));
+            return null;
+        }
+    }, [loadSecureRuntimeState]);
+
+    const updatePendingAction = useCallback(async (
+        id: string,
+        updates: { approvalStatus?: PendingDelegatedAction["approvalStatus"]; stepUpStatus?: PendingDelegatedAction["stepUpStatus"] },
+    ) => {
+        try {
+            setDashboardError(null);
+            const pendingAction = await secureActionAdapter.updatePendingAction(id, updates);
+            await pendingDelegatedActionService.upsertPendingAction(pendingAction);
+            await loadSecureRuntimeState();
+            return pendingAction;
+        } catch (error) {
+            setDashboardError(error instanceof Error ? error.message : String(error));
+            return null;
+        }
+    }, [loadSecureRuntimeState]);
+
+    const approvePendingAction = useCallback(async (id: string) => {
+        return updatePendingAction(id, { approvalStatus: "approved" });
+    }, [updatePendingAction]);
+
+    const rejectPendingAction = useCallback(async (id: string) => {
+        return updatePendingAction(id, { approvalStatus: "rejected" });
+    }, [updatePendingAction]);
+
+    const executePendingAction = useCallback(async (id: string): Promise<SecureActionExecutionResult | null> => {
+        try {
+            setDashboardError(null);
+            const result = await secureActionAdapter.executePendingAction(id);
+            await pendingDelegatedActionService.upsertPendingAction(result.pendingAction);
+            await loadSecureRuntimeState();
+            return result;
+        } catch (error) {
+            setDashboardError(error instanceof Error ? error.message : String(error));
+            return null;
+        }
+    }, [loadSecureRuntimeState]);
+
+    const beginLogin = useCallback((returnTo: string = "/settings") => {
+        secureActionAdapter.beginLogin(returnTo);
+    }, []);
+
+    const beginLogout = useCallback((returnTo: string = "/settings") => {
+        secureActionAdapter.beginLogout(returnTo);
+    }, []);
+
     useEffect(() => {
         if (!integrationState.project || !selectedBranch) {
             return;
@@ -386,6 +497,7 @@ export const useTaskHub = () => {
 
     return {
         integrationState,
+        secureRuntimeState,
         selectedBranch,
         setSelectedBranch,
         isCreatingTask,
@@ -396,5 +508,12 @@ export const useTaskHub = () => {
         startCodeReviewIssue,
         handleProjectChange,
         refreshIntegration: loadIntegrationState,
+        refreshSecureRuntime: loadSecureRuntimeState,
+        previewDelegatedAction,
+        approvePendingAction,
+        rejectPendingAction,
+        executePendingAction,
+        beginLogin,
+        beginLogout,
     };
 };

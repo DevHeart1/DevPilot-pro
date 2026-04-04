@@ -2,8 +2,15 @@ import React from "react";
 
 import { Link } from "react-router-dom";
 import { ProjectContextNav, ProjectContextNavProps } from "./ProjectContextNav";
+import { AuthSessionSnapshot, ConnectedIntegration } from "../../types";
 
-export const Header: React.FC<Partial<ProjectContextNavProps>> = (props) => (
+interface HeaderProps extends Partial<ProjectContextNavProps> {
+    authSession?: AuthSessionSnapshot;
+    connectedIntegrations?: ConnectedIntegration[];
+    pendingApprovalCount?: number;
+}
+
+export const Header: React.FC<HeaderProps> = (props) => (
     <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border-subtle bg-background-dark/50 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <Link
             to="/"
@@ -24,6 +31,18 @@ export const Header: React.FC<Partial<ProjectContextNavProps>> = (props) => (
                     <ProjectContextNav {...(props as ProjectContextNavProps)} />
                 </div>
             )}
+            <div className="hidden xl:flex items-center gap-3 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5">
+                <span className={`inline-flex h-2 w-2 rounded-full ${props.authSession?.auth0.tokenVaultReady ? "bg-emerald-400" : props.authSession?.isFallback ? "bg-amber-400" : "bg-slate-500"}`} />
+                <div className="flex items-center gap-2 text-[11px] font-medium text-slate-300">
+                    <span>{props.authSession?.status === "authenticated" ? (props.authSession.user?.name || "Authenticated") : "Secure Runtime"}</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-slate-500">
+                        {(props.connectedIntegrations || []).filter((integration) => integration.status === "connected").length} tools
+                    </span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-slate-500">{props.pendingApprovalCount || 0} approvals</span>
+                </div>
+            </div>
             <div className="mr-6 hidden items-center gap-6 md:flex">
                 <Link
                     to="/documentation"

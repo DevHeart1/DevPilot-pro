@@ -44,8 +44,8 @@ function toConsoleEvidence(output: string): string[] {
 }
 
 function extractReferencedPaths(output: string): string[] {
-  const matches =
-    output.match(/(?:\.{0,2}\/)?[A-Za-z0-9@._/-]+\.(?:tsx?|jsx?|css|scss|mjs|cjs|json)/g) ||
+  const matches: string[] =
+    output.match(/(?:\.{0,2}\/)?[A-Za-z0-9@._/-]+\.(?:tsx?|jsx?|css|scss|mjs|cjs|json)/g) ??
     [];
 
   return Array.from(new Set(matches.filter((match) => match.includes("/")))).slice(0, 6);

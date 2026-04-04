@@ -8,6 +8,7 @@ import { Routes, Route, useNavigate, useParams, Navigate } from "react-router-do
 import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
 import { DashboardHeroComposer } from "./components/DashboardHeroComposer";
+import { SecureDelegationOverview } from "./components/dashboard/SecureDelegationOverview";
 import { Tabs } from "./components/dashboard/Tabs";
 import { TaskList } from "./components/dashboard/TaskList";
 import { TaskDetail } from "./components/dashboard/TaskDetail";
@@ -50,6 +51,7 @@ export default function App() {
 
   const {
     integrationState,
+    secureRuntimeState,
     selectedBranch,
     setSelectedBranch,
     isCreatingTask,
@@ -59,6 +61,13 @@ export default function App() {
     createTask,
     startCodeReviewIssue,
     handleProjectChange,
+    refreshSecureRuntime,
+    previewDelegatedAction,
+    approvePendingAction,
+    rejectPendingAction,
+    executePendingAction,
+    beginLogin,
+    beginLogout,
   } = useTaskHub();
 
   const handleCreateTask = async (prompt: string) => {
@@ -75,7 +84,11 @@ export default function App() {
         path="/"
         element={
           <div className="min-h-screen bg-background-dark font-display text-slate-100 selection:bg-primary/30">
-            <Header />
+            <Header
+              authSession={secureRuntimeState.session}
+              connectedIntegrations={secureRuntimeState.integrations}
+              pendingApprovalCount={secureRuntimeState.pendingActions.filter((action) => action.approvalStatus === "pending").length}
+            />
             <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
               <DashboardHeroComposer
                 onSubmit={handleCreateTask}
@@ -87,6 +100,15 @@ export default function App() {
                 branches={branchNames}
                 onProjectChange={handleProjectChange}
                 onBranchChange={setSelectedBranch}
+              />
+
+              <SecureDelegationOverview
+                session={secureRuntimeState.session}
+                integrations={secureRuntimeState.integrations}
+                policies={secureRuntimeState.policies}
+                pendingActions={secureRuntimeState.pendingActions}
+                warnings={secureRuntimeState.warnings}
+                loading={secureRuntimeState.loading}
               />
 
               <section className="mt-16">
@@ -120,7 +142,21 @@ export default function App() {
       <Route path="/changelog" element={<Changelog onBack={() => navigate("/")} />} />
       <Route
         path="/settings"
-        element={<Settings onBack={() => navigate("/")} userConfig={userConfig} onUpdateConfig={setUserConfig} />}
+        element={(
+          <Settings
+            onBack={() => navigate("/")}
+            userConfig={userConfig}
+            onUpdateConfig={setUserConfig}
+            secureRuntimeState={secureRuntimeState}
+            onRefreshSecureRuntime={refreshSecureRuntime}
+            onPreviewDelegatedAction={previewDelegatedAction}
+            onApprovePendingAction={approvePendingAction}
+            onRejectPendingAction={rejectPendingAction}
+            onExecutePendingAction={executePendingAction}
+            onLogin={beginLogin}
+            onLogout={beginLogout}
+          />
+        )}
       />
       <Route
         path="/privacy"
