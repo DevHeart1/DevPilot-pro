@@ -13,7 +13,7 @@ createRoot(document.getElementById('root')!).render(
       clientId={config.auth0ClientId}
       authorizationParams={{
         redirect_uri: window.location.origin,
-        audience: config.auth0Audience,
+        ...(config.auth0Audience ? { audience: config.auth0Audience } : {}),
       }}
     >
       <BrowserRouter>
