@@ -152,13 +152,22 @@ export const secureActionAdapter = {
     );
   },
 
+  /**
+   * @deprecated Use loginWithRedirect from @auth0/auth0-react instead.
+   * This manual redirect is kept only for non-live-mode BFF local testing.
+   */
   beginLogin(returnTo: string = "/settings"): void {
+    console.warn("[secureActionAdapter] Manual login redirect is deprecated. Use Auth0 React SDK.");
     window.location.assign(
       `${endpoint("/api/secure-runtime/auth/login")}?returnTo=${encodeURIComponent(returnTo)}`,
     );
   },
 
+  /**
+   * @deprecated Use logout from @auth0/auth0-react instead.
+   */
   beginLogout(returnTo: string = "/settings"): void {
+    console.warn("[secureActionAdapter] Manual logout redirect is deprecated. Use Auth0 React SDK.");
     window.location.assign(
       `${endpoint("/api/secure-runtime/auth/logout")}?returnTo=${encodeURIComponent(returnTo)}`,
     );

@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "vite --port=3000 --strictPort --host=0.0.0.0",
     "runtime": "tsx server/secure-runtime.ts",
     "build": "vite build",
     "preview": "vite preview",
@@ -13,6 +13,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@auth0/auth0-react": "^2.16.1",
     "@google/genai": "^1.45.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.14",

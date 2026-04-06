@@ -3,6 +3,7 @@ import { sandboxAdapter } from "../lib/adapters/sandbox.adapter";
 import { gitlabRepositoryAdapter } from "../lib/adapters/gitlabRepository.adapter";
 import { gitlabDuoAdapter } from "../lib/adapters/gitlabDuo.adapter";
 import { secureActionAdapter } from "../lib/adapters/secureAction.adapter";
+import { useAuth0 } from "@auth0/auth0-react";
 import { config } from "../lib/config/env";
 import { initializeDb } from "../lib/seeds";
 import {
@@ -88,6 +89,13 @@ interface TaskSeed {
 }
 
 export const useTaskHub = () => {
+    const {
+        isAuthenticated,
+        user,
+        isLoading: authLoading,
+        loginWithRedirect,
+        logout: auth0Logout,
+    } = useAuth0();
     const [integrationState, setIntegrationState] = useState<IntegrationState>({
         loading: true,
         ready: false,
@@ -262,6 +270,49 @@ export const useTaskHub = () => {
             updatedAt: snapshot.updatedAt,
         });
     }, []);
+
+    // Sync Auth0 SDK state to secure runtime state
+    useEffect(() => {
+        if (!config.liveAuthMode) return;
+
+        if (isAuthenticated && user) {
+            setSecureRuntimeState((current) => ({
+                ...current,
+                loading: current.loading || authLoading,
+                session: {
+                    id: `session:${user.sub}`,
+                    status: "authenticated",
+                    runtimeMode: current.runtimeMode,
+                    isFallback: false,
+                    user: {
+                        sub: user.sub || "",
+                        name: user.name || "",
+                        email: user.email,
+                        pictureUrl: user.picture,
+                    },
+                    auth0: {
+                        configured: true,
+                        liveAuthEnabled: true,
+                        liveDelegatedActionEnabled: config.liveDelegatedActionMode,
+                        liveAsyncAuthorizationEnabled: config.liveAsyncAuthorizationMode,
+                        liveStepUpEnabled: config.liveStepUpMode,
+                        tokenVaultReady: true,
+                        domain: config.auth0Domain,
+                        audience: config.auth0Audience,
+                    },
+                    message: "Identity verified via Auth0 SDK",
+                    updatedAt: Date.now(),
+                },
+            }));
+        }
+    }, [isAuthenticated, user, authLoading]);
+
+    // Refresh secure runtime (BFF) when authentication status changes
+    useEffect(() => {
+        if (isAuthenticated) {
+            void loadSecureRuntimeState();
+        }
+    }, [isAuthenticated, loadSecureRuntimeState]);
 
     const handleProjectChange = async (projectId: string | number) => {
         setSelectedProjectId(projectId);
@@ -621,12 +672,26 @@ export const useTaskHub = () => {
     ]);
 
     const beginLogin = useCallback((returnTo: string = "/settings") => {
-        secureActionAdapter.beginLogin(returnTo);
-    }, []);
+        if (config.liveAuthMode) {
+            loginWithRedirect({
+                appState: { returnTo }
+            });
+        } else {
+            secureActionAdapter.beginLogin(returnTo);
+        }
+    }, [loginWithRedirect]);
 
     const beginLogout = useCallback((returnTo: string = "/settings") => {
-        secureActionAdapter.beginLogout(returnTo);
-    }, []);
+        if (config.liveAuthMode) {
+            auth0Logout({ 
+                logoutParams: { 
+                    returnTo: window.location.origin + returnTo 
+                } 
+            });
+        } else {
+            secureActionAdapter.beginLogout(returnTo);
+        }
+    }, [auth0Logout]);
 
     useEffect(() => {
         if (!integrationState.project || !selectedBranch) {
